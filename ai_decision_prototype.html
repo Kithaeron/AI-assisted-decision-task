@@ -229,13 +229,13 @@
         const employmentYears = Math.round((0.5 + random() * 14.5) * 10) / 10;
         const savings = randomInt(500, 36000, 500, random);
         const loanToIncome = Math.round((loanAmount / income) * 100);
-        const savingsCoverageMonths = Math.round((savings / Math.max(loanAmount / 24, 1)) * 10) / 10;
+        const savingsToLoan = Math.round((savings / loanAmount) * 100);
 
         const riskScore =
           (loanToIncome - 24) * 1.25 +
           (660 - creditScore) * 0.16 +
           Math.min(employmentYears, 10) * 1.1 -
-          Math.min(savingsCoverageMonths, 12) * 0.8 +
+          Math.min(savingsToLoan, 60) * 0.15 +
           (age < 25 ? 3 : 0) +
           (random() - 0.5) * 18;
 
@@ -252,7 +252,7 @@
           employmentYears,
           savings,
           loanToIncome,
-          savingsCoverageMonths,
+          savingsToLoan,
           actualOutcome,
           aiRecommendation,
           aiIsCorrect
@@ -262,10 +262,11 @@
       function buildFeatureExplanation(applicant, random) {
         const loanThreshold = 24;
         const creditCutoff = 660;
-        const savingsFloor = 4;
+        const savingsFloor = 20;
         const employmentFloor = 2;
         const rejectTemplates = [];
         const approveTemplates = [];
+        const savingsSignal = applicant.savingsToLoan >= 100 ? "savings exceed loan" : `savings ${applicant.savingsToLoan}%`;
 
         if (applicant.loanToIncome > loanThreshold) {
           rejectTemplates.push(`Loan is ${applicant.loanToIncome}% of income, above ${loanThreshold}%, load raises risk.`);
@@ -279,10 +280,12 @@
           approveTemplates.push(`Score ${applicant.creditScore} meets ${creditCutoff}, credit risk is lower.`);
         }
 
-        if (applicant.savingsCoverageMonths < savingsFloor) {
-          rejectTemplates.push(`Savings cover ${applicant.savingsCoverageMonths.toFixed(1)} payments, Insufficient buffer funds.`);
+        if (applicant.savingsToLoan < savingsFloor) {
+          rejectTemplates.push(`Savings are ${applicant.savingsToLoan}% of loan; buffer is weak.`);
+        } else if (applicant.savingsToLoan >= 100) {
+          approveTemplates.push("Savings exceed loan amount; buffer supports repayment.");
         } else {
-          approveTemplates.push(`Savings cover ${applicant.savingsCoverageMonths.toFixed(1)} payments, funds supports repayment.`);
+          approveTemplates.push(`Savings are ${applicant.savingsToLoan}% of loan; buffer supports repayment.`);
         }
 
         if (applicant.employmentYears < employmentFloor) {
@@ -292,11 +295,11 @@
         }
 
         if (rejectTemplates.length === 0) {
-          rejectTemplates.push(`Loan ${applicant.loanToIncome}%, score ${applicant.creditScore}, and buffer ${applicant.savingsCoverageMonths.toFixed(1)} combine above cutoff.`);
+          rejectTemplates.push(`Combined: loan ${applicant.loanToIncome}%, score ${applicant.creditScore}, ${savingsSignal}; above cutoff.`);
         }
 
         if (approveTemplates.length === 0) {
-          approveTemplates.push(`Loan ${applicant.loanToIncome}%, score ${applicant.creditScore}, and buffer ${applicant.savingsCoverageMonths.toFixed(1)} combine below cutoff.`);
+          approveTemplates.push(`Combined: loan ${applicant.loanToIncome}%, score ${applicant.creditScore}, ${savingsSignal}; below cutoff.`);
         }
 
         return choose(applicant.aiRecommendation === "REJECT" ? rejectTemplates : approveTemplates, random);
@@ -757,7 +760,7 @@
           employment_years: applicant.employmentYears,
           savings_eur: applicant.savings,
           loan_to_income_pct: applicant.loanToIncome,
-          savings_coverage_months: applicant.savingsCoverageMonths,
+          savings_to_loan_pct: applicant.savingsToLoan,
           actual_outcome: applicant.actualOutcome,
           ai_recommendation: applicant.aiRecommendation,
           ai_accuracy: applicant.aiIsCorrect ? "correct" : "incorrect",
@@ -1000,7 +1003,7 @@
           "employment_years",
           "savings_eur",
           "loan_to_income_pct",
-          "savings_coverage_months",
+          "savings_to_loan_pct",
           "actual_outcome",
           "ai_recommendation",
           "ai_accuracy",
