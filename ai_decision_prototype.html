@@ -263,14 +263,14 @@
         const loanThreshold = choose([24, 28, 32, 36, 40], random);
         const creditCutoff = choose([620, 640, 650, 660, 680], random);
         const rejectTemplates = [
-          `The requested ${formatCurrency(applicant.loanAmount)} loan equals ${applicant.loanToIncome}% of annual income, compared with a ${loanThreshold}% review threshold.`,
-          `The model weighs the ${applicant.creditScore} credit score against a ${creditCutoff} cutoff, with ${applicant.employmentYears} years of employment history in the calculation.`,
-          `The savings buffer is ${formatCurrency(applicant.savings)}, which covers about ${applicant.savingsCoverageMonths.toFixed(1)} estimated monthly loan payments.`
+          `Loan/income: ${applicant.loanToIncome}% vs ${loanThreshold}% threshold.`,
+          `Credit score: ${applicant.creditScore} vs ${creditCutoff} cutoff; employment: ${applicant.employmentYears} yrs.`,
+          `Savings buffer: ${formatCurrency(applicant.savings)}; about ${applicant.savingsCoverageMonths.toFixed(1)} monthly payments.`
         ];
         const approveTemplates = [
-          `The requested ${formatCurrency(applicant.loanAmount)} loan is ${applicant.loanToIncome}% of annual income, staying near the bank's ${loanThreshold}% review boundary.`,
-          `The ${applicant.creditScore} credit score is assessed against a ${creditCutoff} cutoff, with ${applicant.employmentYears} years of employment stability included in the calculation.`,
-          `${formatCurrency(applicant.savings)} in savings is counted as a repayment buffer, covering about ${applicant.savingsCoverageMonths.toFixed(1)} estimated monthly loan payments.`
+          `Loan/income: ${applicant.loanToIncome}% vs ${loanThreshold}% threshold.`,
+          `Credit score: ${applicant.creditScore} vs ${creditCutoff} cutoff; employment: ${applicant.employmentYears} yrs.`,
+          `Savings buffer: ${formatCurrency(applicant.savings)}; about ${applicant.savingsCoverageMonths.toFixed(1)} monthly payments.`
         ];
         return choose(applicant.aiRecommendation === "REJECT" ? rejectTemplates : approveTemplates, random);
       }
@@ -283,9 +283,9 @@
         const loanBandLow = Math.max(0, Math.floor(applicant.loanToIncome / 10) * 10);
         const loanBandHigh = loanBandLow + 9;
         const templates = [
-          `In ${sampleSize} prior cases with credit scores from ${creditBandLow} to ${creditBandHigh}, this model's ${applicant.aiRecommendation.toLowerCase()} advice matched observed outcomes ${reliability}% of the time.`,
-          `For applicants with requested-loan-to-income ratios between ${loanBandLow}% and ${loanBandHigh}%, historical validation showed ${reliability}% agreement between this recommendation type and later repayment outcomes.`,
-          `The model was previously benchmarked on ${sampleSize} similar loan files; its same-direction recommendations were correct in ${reliability}% of those cases.`
+          `Credit band ${creditBandLow}-${creditBandHigh}: ${reliability}% match in ${sampleSize} cases.`,
+          `Loan/income band ${loanBandLow}-${loanBandHigh}%: ${reliability}% historical match.`,
+          `Similar loan files: ${sampleSize}; same advice correct ${reliability}%.`
         ];
         return choose(templates, random);
       }
@@ -293,9 +293,9 @@
       function buildRawConfidence(applicant, random) {
         const confidence = randomInt(71, 99, 1, random) + choose([0.1, 0.2, 0.4, 0.6, 0.8], random);
         const templates = [
-          `AI confidence score for this ${applicant.aiRecommendation.toLowerCase()} recommendation: ${confidence.toFixed(1)}%.`,
-          `The system reports ${confidence.toFixed(1)}% confidence in the recommended action.`,
-          `Confidence indicator: ${confidence.toFixed(1)} out of 100 for the AI recommendation.`
+          `AI confidence: ${confidence.toFixed(1)}%.`,
+          `System confidence: ${confidence.toFixed(1)}%.`,
+          `Confidence score: ${confidence.toFixed(1)}/100.`
         ];
         return {
           text: choose(templates, random),
@@ -305,11 +305,11 @@
 
       function buildSocialConsensus(applicant, random) {
         const consensus = randomInt(62, 94, 1, random);
-        const group = choose(["pilot reviewers", "loan officers in the review panel", "previous decision makers", "trained credit assessors"], random);
+        const group = choose(["reviewers", "loan officers", "prior decision makers", "credit assessors"], random);
         const templates = [
-          `${consensus}% of ${group} shown a similar summary selected the same ${applicant.aiRecommendation.toLowerCase()} action.`,
-          `In a comparison panel, ${consensus}% of ${group} agreed with this AI recommendation.`,
-          `The platform notes that ${consensus}% of ${group} typically follow this recommendation for similar files.`
+          `${consensus}% of ${group} chose the same action.`,
+          `${consensus}% of ${group} agreed with the AI.`,
+          `${consensus}% of ${group} usually follow this advice.`
         ];
         return {
           text: choose(templates, random),
