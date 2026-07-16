@@ -268,27 +268,27 @@
         const approveTemplates = [];
 
         if (applicant.loanToIncome > loanThreshold) {
-          rejectTemplates.push(`Loan is ${applicant.loanToIncome}% of income, above ${loanThreshold}%; load raises risk.`);
+          rejectTemplates.push(`Loan is ${applicant.loanToIncome}% of income, above ${loanThreshold}%, load raises risk.`);
         } else {
-          approveTemplates.push(`Loan is ${applicant.loanToIncome}% of income, within ${loanThreshold}%; load is manageable.`);
+          approveTemplates.push(`Loan is ${applicant.loanToIncome}% of income, within ${loanThreshold}%, load is manageable.`);
         }
 
         if (applicant.creditScore < creditCutoff) {
-          rejectTemplates.push(`Score ${applicant.creditScore} is below ${creditCutoff}; credit risk is higher.`);
+          rejectTemplates.push(`Score ${applicant.creditScore} is below ${creditCutoff}, credit risk is higher.`);
         } else {
-          approveTemplates.push(`Score ${applicant.creditScore} meets ${creditCutoff}; credit risk is lower.`);
+          approveTemplates.push(`Score ${applicant.creditScore} meets ${creditCutoff}, credit risk is lower.`);
         }
 
         if (applicant.savingsCoverageMonths < savingsFloor) {
-          rejectTemplates.push(`Savings cover ${applicant.savingsCoverageMonths.toFixed(1)} payments; buffer is thin.`);
+          rejectTemplates.push(`Savings cover ${applicant.savingsCoverageMonths.toFixed(1)} payments, Insufficient buffer funds.`);
         } else {
-          approveTemplates.push(`Savings cover ${applicant.savingsCoverageMonths.toFixed(1)} payments; buffer supports repayment.`);
+          approveTemplates.push(`Savings cover ${applicant.savingsCoverageMonths.toFixed(1)} payments, funds supports repayment.`);
         }
 
         if (applicant.employmentYears < employmentFloor) {
-          rejectTemplates.push(`Employment is ${applicant.employmentYears} yrs; short history adds risk.`);
+          rejectTemplates.push(`Employment is ${applicant.employmentYears} yrs, short history adds risk.`);
         } else {
-          approveTemplates.push(`Employment is ${applicant.employmentYears} yrs; stability supports repayment.`);
+          approveTemplates.push(`Employment is ${applicant.employmentYears} yrs, stability supports repayment.`);
         }
 
         if (rejectTemplates.length === 0) {
@@ -310,9 +310,9 @@
         const loanBandLow = Math.max(0, Math.floor(applicant.loanToIncome / 10) * 10);
         const loanBandHigh = loanBandLow + 9;
         const templates = [
-          `Credit band ${creditBandLow}-${creditBandHigh}: ${reliability}% match in ${sampleSize} cases.`,
-          `Loan/income band ${loanBandLow}-${loanBandHigh}%: ${reliability}% historical match.`,
-          `Similar loan files: ${sampleSize}; same advice correct ${reliability}%.`
+          `For similar credit scores, the AI was right ${reliability}% of the time.`,
+          `For similar loan size, the AI was right ${reliability}% of the time.`,
+          `In ${sampleSize} similar cases, this advice was right ${reliability}% of the time.`
         ];
         return choose(templates, random);
       }
