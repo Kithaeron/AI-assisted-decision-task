@@ -260,18 +260,45 @@
       }
 
       function buildFeatureExplanation(applicant, random) {
-        const loanThreshold = choose([24, 28, 32, 36, 40], random);
-        const creditCutoff = choose([620, 640, 650, 660, 680], random);
-        const rejectTemplates = [
-          `Loan/income: ${applicant.loanToIncome}% vs ${loanThreshold}% threshold.`,
-          `Credit score: ${applicant.creditScore} vs ${creditCutoff} cutoff; employment: ${applicant.employmentYears} yrs.`,
-          `Savings buffer: ${formatCurrency(applicant.savings)}; about ${applicant.savingsCoverageMonths.toFixed(1)} monthly payments.`
-        ];
-        const approveTemplates = [
-          `Loan/income: ${applicant.loanToIncome}% vs ${loanThreshold}% threshold.`,
-          `Credit score: ${applicant.creditScore} vs ${creditCutoff} cutoff; employment: ${applicant.employmentYears} yrs.`,
-          `Savings buffer: ${formatCurrency(applicant.savings)}; about ${applicant.savingsCoverageMonths.toFixed(1)} monthly payments.`
-        ];
+        const loanThreshold = 24;
+        const creditCutoff = 660;
+        const savingsFloor = 4;
+        const employmentFloor = 2;
+        const rejectTemplates = [];
+        const approveTemplates = [];
+
+        if (applicant.loanToIncome > loanThreshold) {
+          rejectTemplates.push(`Loan is ${applicant.loanToIncome}% of income, above ${loanThreshold}%; load raises risk.`);
+        } else {
+          approveTemplates.push(`Loan is ${applicant.loanToIncome}% of income, within ${loanThreshold}%; load is manageable.`);
+        }
+
+        if (applicant.creditScore < creditCutoff) {
+          rejectTemplates.push(`Score ${applicant.creditScore} is below ${creditCutoff}; credit risk is higher.`);
+        } else {
+          approveTemplates.push(`Score ${applicant.creditScore} meets ${creditCutoff}; credit risk is lower.`);
+        }
+
+        if (applicant.savingsCoverageMonths < savingsFloor) {
+          rejectTemplates.push(`Savings cover ${applicant.savingsCoverageMonths.toFixed(1)} payments; buffer is thin.`);
+        } else {
+          approveTemplates.push(`Savings cover ${applicant.savingsCoverageMonths.toFixed(1)} payments; buffer supports repayment.`);
+        }
+
+        if (applicant.employmentYears < employmentFloor) {
+          rejectTemplates.push(`Employment is ${applicant.employmentYears} yrs; short history adds risk.`);
+        } else {
+          approveTemplates.push(`Employment is ${applicant.employmentYears} yrs; stability supports repayment.`);
+        }
+
+        if (rejectTemplates.length === 0) {
+          rejectTemplates.push(`Loan ${applicant.loanToIncome}%, score ${applicant.creditScore}, and buffer ${applicant.savingsCoverageMonths.toFixed(1)} combine above cutoff.`);
+        }
+
+        if (approveTemplates.length === 0) {
+          approveTemplates.push(`Loan ${applicant.loanToIncome}%, score ${applicant.creditScore}, and buffer ${applicant.savingsCoverageMonths.toFixed(1)} combine below cutoff.`);
+        }
+
         return choose(applicant.aiRecommendation === "REJECT" ? rejectTemplates : approveTemplates, random);
       }
 
