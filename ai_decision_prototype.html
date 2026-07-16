@@ -1,0 +1,1030 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>AI-Assisted Loan Decision Experiment</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet" />
+  <style>
+    body {
+      font-family: "Inter", system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+    }
+
+    .timer-bar {
+      transition: width 80ms linear;
+    }
+
+    .modal-hidden {
+      opacity: 0;
+      pointer-events: none;
+      transform: scale(0.98);
+    }
+
+    .likert-input:checked + span {
+      background: #0f172a;
+      border-color: #0f172a;
+      color: #ffffff;
+      box-shadow: 0 8px 18px rgba(15, 23, 42, 0.16);
+    }
+  </style>
+</head>
+<body class="min-h-screen bg-slate-100 text-slate-900">
+  <main id="app" class="min-h-screen"></main>
+
+  <div
+    id="reportModal"
+    class="modal-hidden fixed inset-0 z-50 flex items-center justify-center bg-slate-950/60 px-4 transition duration-150"
+    role="dialog"
+    aria-modal="true"
+    aria-labelledby="reportModalTitle"
+  >
+    <div class="w-full max-w-2xl rounded-lg bg-white p-6 shadow-xl">
+      <div class="flex items-start justify-between gap-4">
+        <div>
+          <p id="reportModalKicker" class="text-sm font-semibold uppercase tracking-wide text-slate-500">Decision recorded</p>
+          <h2 id="reportModalTitle" class="mt-1 text-2xl font-extrabold text-slate-950">Which information influenced your decision?</h2>
+        </div>
+        <span id="reportRtBadge" class="rounded-md border border-slate-200 bg-slate-50 px-3 py-1 text-sm font-bold tabular-nums text-slate-700"></span>
+      </div>
+
+      <p class="mt-3 text-base font-medium text-slate-700">Select all that apply.</p>
+      <fieldset id="reportOptions" class="mt-6 space-y-3"></fieldset>
+
+      <p id="reportError" class="mt-4 hidden rounded-md border border-red-200 bg-red-50 px-4 py-3 text-sm font-semibold text-red-700">
+        Please select at least one option.
+      </p>
+
+      <button
+        id="submitReportButton"
+        type="button"
+        class="mt-6 w-full rounded-lg bg-slate-950 px-5 py-4 text-lg font-extrabold text-white shadow-md transition hover:bg-slate-800 focus:outline-none focus:ring-4 focus:ring-slate-300"
+      >
+        Submit and Continue
+      </button>
+    </div>
+  </div>
+
+  <script>
+    (() => {
+      "use strict";
+
+      const STIMULUS_POOL_SIZE = 240;
+      const DEFAULT_SESSION_TRIALS = 24;
+      const MAX_SESSION_TRIALS = STIMULUS_POOL_SIZE;
+      const PROLIFIC_COMPLETION_URL = "https://app.prolific.com/submissions/complete?cc=PUT_COMPLETION_CODE_HERE";
+
+      const WARRANTED_CUES = {
+        W1: "Feature Explanation",
+        W2: "Historical Reliability"
+      };
+
+      const UNWARRANTED_CUES = {
+        U1: "Raw Confidence Score",
+        U2: "Social Consensus"
+      };
+
+      const CUE_PAIRS = [
+        ["W1", "U1"],
+        ["W1", "U2"],
+        ["W2", "U1"],
+        ["W2", "U2"]
+      ];
+
+      const conditions = {
+        pressure: {
+          key: "pressure",
+          label: "5-second time pressure",
+          csvLabel: "5_seconds",
+          durationMs: 5000
+        },
+        no_pressure: {
+          key: "no_pressure",
+          label: "No time limit",
+          csvLabel: "no_time_limit",
+          durationMs: null
+        }
+      };
+
+      const params = new URLSearchParams(window.location.search);
+      const participantId = params.get("PROLIFIC_PID") || params.get("participant_id") || "TEST_PARTICIPANT";
+      const isProlificSession = params.has("PROLIFIC_PID");
+      const studyId = params.get("STUDY_ID") || "";
+      const sessionParam = params.get("SESSION_ID") || "";
+      const sessionId = sessionParam || `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+      const seedParam = params.get("seed") || `${participantId}-${sessionId}`;
+      const requestedTrials = Number.parseInt(params.get("trials"), 10);
+      const trialCount = Number.isFinite(requestedTrials)
+        ? Math.min(Math.max(requestedTrials, 1), MAX_SESSION_TRIALS)
+        : DEFAULT_SESSION_TRIALS;
+      const initialConditionKey = normalizeCondition(params.get("condition") || params.get("time_pressure"));
+
+      const app = document.getElementById("app");
+      const reportModal = document.getElementById("reportModal");
+      const reportOptions = document.getElementById("reportOptions");
+      const reportError = document.getElementById("reportError");
+      const submitReportButton = document.getElementById("submitReportButton");
+      const reportRtBadge = document.getElementById("reportRtBadge");
+      const reportModalKicker = document.getElementById("reportModalKicker");
+
+      const state = {
+        participantId,
+        studyId,
+        sessionId,
+        seed: seedParam,
+        conditionKey: initialConditionKey,
+        stimulusPool: [],
+        trialOrder: [],
+        currentTrialIndex: 0,
+        trialStartMs: 0,
+        timerFrame: null,
+        decisionLocked: false,
+        pendingResponse: null,
+        responses: [],
+        preSurvey: null,
+        postSurvey: null
+      };
+
+      function normalizeCondition(value) {
+        const normalized = String(value || "").trim().toLowerCase();
+        if (["no_pressure", "none", "no", "unlimited", "control", "low"].includes(normalized)) {
+          return "no_pressure";
+        }
+        return "pressure";
+      }
+
+      function hashString(value) {
+        let hash = 2166136261;
+        const text = String(value);
+        for (let index = 0; index < text.length; index += 1) {
+          hash ^= text.charCodeAt(index);
+          hash = Math.imul(hash, 16777619);
+        }
+        return hash >>> 0;
+      }
+
+      function mulberry32(seed) {
+        return function random() {
+          let t = seed += 0x6D2B79F5;
+          t = Math.imul(t ^ (t >>> 15), t | 1);
+          t ^= t + Math.imul(t ^ (t >>> 7), t | 61);
+          return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+        };
+      }
+
+      function shuffle(items, random) {
+        const copy = [...items];
+        for (let index = copy.length - 1; index > 0; index -= 1) {
+          const swapIndex = Math.floor(random() * (index + 1));
+          [copy[index], copy[swapIndex]] = [copy[swapIndex], copy[index]];
+        }
+        return copy;
+      }
+
+      function choose(items, random) {
+        return items[Math.floor(random() * items.length)];
+      }
+
+      function randomInt(min, max, step, random) {
+        const steps = Math.floor((max - min) / step);
+        return min + Math.floor(random() * (steps + 1)) * step;
+      }
+
+      function formatCurrency(value) {
+        return `EUR ${Number(value).toLocaleString("en-US")}`;
+      }
+
+      function escapeHtml(value) {
+        return String(value ?? "")
+          .replace(/&/g, "&amp;")
+          .replace(/</g, "&lt;")
+          .replace(/>/g, "&gt;")
+          .replace(/"/g, "&quot;")
+          .replace(/'/g, "&#039;");
+      }
+
+      function oppositeDecision(decision) {
+        return decision === "APPROVE" ? "REJECT" : "APPROVE";
+      }
+
+      function decisionTone(decision) {
+        return decision === "APPROVE"
+          ? {
+              badge: "border-emerald-200 bg-emerald-50 text-emerald-700",
+              text: "text-emerald-700"
+            }
+          : {
+              badge: "border-red-200 bg-red-50 text-red-700",
+              text: "text-red-700"
+            };
+      }
+
+      function generateApplicant(index, random) {
+        const income = randomInt(28000, 110000, 1000, random);
+        const loanAmount = randomInt(6000, 42000, 500, random);
+        const creditScore = randomInt(540, 790, 5, random);
+        const age = randomInt(23, 64, 1, random);
+        const employmentYears = Math.round((0.5 + random() * 14.5) * 10) / 10;
+        const savings = randomInt(500, 36000, 500, random);
+        const loanToIncome = Math.round((loanAmount / income) * 100);
+        const savingsCoverageMonths = Math.round((savings / Math.max(loanAmount / 24, 1)) * 10) / 10;
+
+        const riskScore =
+          (loanToIncome - 24) * 1.25 +
+          (660 - creditScore) * 0.16 +
+          Math.min(employmentYears, 10) * 1.1 -
+          Math.min(savingsCoverageMonths, 12) * 0.8 +
+          (age < 25 ? 3 : 0) +
+          (random() - 0.5) * 18;
+
+        const actualOutcome = riskScore >= 0 ? "REJECT" : "APPROVE";
+        const aiIsCorrect = random() < 0.78;
+        const aiRecommendation = aiIsCorrect ? actualOutcome : oppositeDecision(actualOutcome);
+
+        return {
+          applicantId: `A${String(index + 1).padStart(3, "0")}`,
+          age,
+          income,
+          loanAmount,
+          creditScore,
+          employmentYears,
+          savings,
+          loanToIncome,
+          savingsCoverageMonths,
+          actualOutcome,
+          aiRecommendation,
+          aiIsCorrect
+        };
+      }
+
+      function buildFeatureExplanation(applicant, random) {
+        const loanThreshold = choose([24, 28, 32, 36, 40], random);
+        const creditCutoff = choose([620, 640, 650, 660, 680], random);
+        const rejectTemplates = [
+          `The requested ${formatCurrency(applicant.loanAmount)} loan equals ${applicant.loanToIncome}% of annual income, compared with a ${loanThreshold}% review threshold.`,
+          `The model weighs the ${applicant.creditScore} credit score against a ${creditCutoff} cutoff, with ${applicant.employmentYears} years of employment history in the calculation.`,
+          `The savings buffer is ${formatCurrency(applicant.savings)}, which covers about ${applicant.savingsCoverageMonths.toFixed(1)} estimated monthly loan payments.`
+        ];
+        const approveTemplates = [
+          `The requested ${formatCurrency(applicant.loanAmount)} loan is ${applicant.loanToIncome}% of annual income, staying near the bank's ${loanThreshold}% review boundary.`,
+          `The ${applicant.creditScore} credit score is assessed against a ${creditCutoff} cutoff, with ${applicant.employmentYears} years of employment stability included in the calculation.`,
+          `${formatCurrency(applicant.savings)} in savings is counted as a repayment buffer, covering about ${applicant.savingsCoverageMonths.toFixed(1)} estimated monthly loan payments.`
+        ];
+        return choose(applicant.aiRecommendation === "REJECT" ? rejectTemplates : approveTemplates, random);
+      }
+
+      function buildHistoricalReliability(applicant, random) {
+        const sampleSize = randomInt(420, 2600, 20, random);
+        const reliability = randomInt(72, 91, 1, random);
+        const creditBandLow = Math.max(500, Math.floor(applicant.creditScore / 25) * 25);
+        const creditBandHigh = creditBandLow + 24;
+        const loanBandLow = Math.max(0, Math.floor(applicant.loanToIncome / 10) * 10);
+        const loanBandHigh = loanBandLow + 9;
+        const templates = [
+          `In ${sampleSize} prior cases with credit scores from ${creditBandLow} to ${creditBandHigh}, this model's ${applicant.aiRecommendation.toLowerCase()} advice matched observed outcomes ${reliability}% of the time.`,
+          `For applicants with requested-loan-to-income ratios between ${loanBandLow}% and ${loanBandHigh}%, historical validation showed ${reliability}% agreement between this recommendation type and later repayment outcomes.`,
+          `The model was previously benchmarked on ${sampleSize} similar loan files; its same-direction recommendations were correct in ${reliability}% of those cases.`
+        ];
+        return choose(templates, random);
+      }
+
+      function buildRawConfidence(applicant, random) {
+        const confidence = randomInt(71, 99, 1, random) + choose([0.1, 0.2, 0.4, 0.6, 0.8], random);
+        const templates = [
+          `AI confidence score for this ${applicant.aiRecommendation.toLowerCase()} recommendation: ${confidence.toFixed(1)}%.`,
+          `The system reports ${confidence.toFixed(1)}% confidence in the recommended action.`,
+          `Confidence indicator: ${confidence.toFixed(1)} out of 100 for the AI recommendation.`
+        ];
+        return {
+          text: choose(templates, random),
+          confidence: confidence.toFixed(1)
+        };
+      }
+
+      function buildSocialConsensus(applicant, random) {
+        const consensus = randomInt(62, 94, 1, random);
+        const group = choose(["pilot reviewers", "loan officers in the review panel", "previous decision makers", "trained credit assessors"], random);
+        const templates = [
+          `${consensus}% of ${group} shown a similar summary selected the same ${applicant.aiRecommendation.toLowerCase()} action.`,
+          `In a comparison panel, ${consensus}% of ${group} agreed with this AI recommendation.`,
+          `The platform notes that ${consensus}% of ${group} typically follow this recommendation for similar files.`
+        ];
+        return {
+          text: choose(templates, random),
+          consensus
+        };
+      }
+
+      function buildCue(cueId, applicant, random) {
+        if (cueId === "W1") {
+          return {
+            id: "W1",
+            category: "warranted",
+            type: WARRANTED_CUES.W1,
+            text: buildFeatureExplanation(applicant, random),
+            metric: ""
+          };
+        }
+
+        if (cueId === "W2") {
+          return {
+            id: "W2",
+            category: "warranted",
+            type: WARRANTED_CUES.W2,
+            text: buildHistoricalReliability(applicant, random),
+            metric: ""
+          };
+        }
+
+        if (cueId === "U1") {
+          const rawConfidence = buildRawConfidence(applicant, random);
+          return {
+            id: "U1",
+            category: "unwarranted",
+            type: UNWARRANTED_CUES.U1,
+            text: rawConfidence.text,
+            metric: rawConfidence.confidence
+          };
+        }
+
+        const socialConsensus = buildSocialConsensus(applicant, random);
+        return {
+          id: "U2",
+          category: "unwarranted",
+          type: UNWARRANTED_CUES.U2,
+          text: socialConsensus.text,
+          metric: socialConsensus.consensus
+        };
+      }
+
+      function buildStimulusPool() {
+        const random = mulberry32(hashString(state.seed));
+        const stimuli = [];
+
+        for (let index = 0; index < STIMULUS_POOL_SIZE; index += 1) {
+          const [warrantedCueId, unwarrantedCueId] = CUE_PAIRS[index % CUE_PAIRS.length];
+          const applicant = generateApplicant(index, random);
+          const warrantedCue = buildCue(warrantedCueId, applicant, random);
+          const unwarrantedCue = buildCue(unwarrantedCueId, applicant, random);
+          const cues = random() < 0.5 ? [warrantedCue, unwarrantedCue] : [unwarrantedCue, warrantedCue];
+
+          stimuli.push({
+            trialId: `T${String(index + 1).padStart(3, "0")}`,
+            cueCombination: `${warrantedCueId}_${unwarrantedCueId}`,
+            applicant,
+            cues,
+            warrantedCue,
+            unwarrantedCue
+          });
+        }
+
+        return shuffle(stimuli, random);
+      }
+
+      function renderWelcome() {
+        app.innerHTML = `
+          <section class="mx-auto flex min-h-screen max-w-5xl items-center px-6 py-10">
+            <div class="w-full rounded-lg border border-slate-200 bg-white p-8 shadow-sm">
+              <p class="text-sm font-semibold uppercase tracking-wide text-slate-500">TU Delft pilot experiment</p>
+              <div class="mt-3 flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
+                <div>
+                  <h1 class="text-3xl font-extrabold tracking-normal text-slate-950">AI-assisted loan decision task</h1>
+                  <p class="mt-4 max-w-3xl leading-7 text-slate-700">
+                    Review each applicant and the AI advice, then choose whether to agree with or override the AI recommendation.
+                  </p>
+                </div>
+                <div class="rounded-lg border border-slate-200 bg-slate-50 px-4 py-3 text-sm font-semibold text-slate-700">
+                  <div>Participant: <span class="tabular-nums">${escapeHtml(participantId)}</span></div>
+                  <div class="mt-1">Trials this session: <span class="tabular-nums">${trialCount}</span></div>
+                  <div class="mt-1">Stimulus pool: <span class="tabular-nums">${STIMULUS_POOL_SIZE}</span></div>
+                </div>
+              </div>
+
+              <div class="mt-8 grid gap-6 lg:grid-cols-[0.8fr_1.2fr]">
+                <section class="rounded-lg border border-slate-200 bg-slate-50 p-5">
+                  <h2 class="text-lg font-bold text-slate-950">Condition</h2>
+                  ${conditionControls()}
+                </section>
+
+                <section class="rounded-lg border border-slate-200 bg-white p-5">
+                  <h2 class="text-lg font-bold text-slate-950">Pre-task questions</h2>
+                  <div class="mt-5 grid gap-5">
+                    ${likertQuestion("pre_ai_familiarity", "I am familiar with AI systems that support financial decisions.", 5)}
+                    ${likertQuestion("pre_ai_limits", "AI recommendations can be useful but may still be wrong.", 5)}
+                    ${likertQuestion("pre_attention", "Attention check: select option 3 for this item.", 5)}
+                  </div>
+                </section>
+              </div>
+
+              <p id="welcomeError" class="mt-5 hidden rounded-md border border-red-200 bg-red-50 px-4 py-3 text-sm font-semibold text-red-700">
+                Please answer all pre-task questions before starting.
+              </p>
+
+              <div class="mt-8 flex justify-end">
+                <button id="startButton" type="button" class="rounded-lg bg-slate-950 px-6 py-3 text-base font-extrabold text-white shadow-sm transition hover:bg-slate-800 focus:outline-none focus:ring-4 focus:ring-slate-300">
+                  Start Task
+                </button>
+              </div>
+            </div>
+          </section>
+        `;
+
+        if (!isProlificSession) {
+          document.querySelectorAll("[data-condition]").forEach((button) => {
+            button.addEventListener("click", () => {
+              state.conditionKey = button.dataset.condition;
+              renderWelcome();
+            });
+          });
+        }
+
+        document.getElementById("startButton").addEventListener("click", startExperiment);
+      }
+
+      function conditionButton(conditionKey, label) {
+        const active = conditionKey === state.conditionKey;
+        const activeClasses = active
+          ? "border-slate-950 bg-slate-950 text-white"
+          : "border-slate-300 bg-white text-slate-700 hover:bg-slate-50";
+        return `
+          <button type="button" data-condition="${conditionKey}" class="rounded-lg border px-4 py-3 text-left text-sm font-bold transition ${activeClasses}">
+            ${escapeHtml(label)}
+          </button>
+        `;
+      }
+
+      function conditionControls() {
+        if (isProlificSession) {
+          return `
+            <div class="mt-4 rounded-lg border border-slate-200 bg-white px-4 py-3 text-sm font-bold text-slate-800">
+              Assigned condition: ${escapeHtml(conditions[state.conditionKey].label)}
+            </div>
+          `;
+        }
+
+        return `
+          <div class="mt-4 grid gap-3" role="group" aria-label="Experimental condition">
+                    ${conditionButton("pressure", "5-second countdown")}
+            ${conditionButton("no_pressure", "No time limit")}
+          </div>
+        `;
+      }
+
+      function likertQuestion(name, label, count) {
+        const options = Array.from({ length: count }, (_, index) => index + 1).map((value) => `
+          <label class="flex cursor-pointer flex-col items-center gap-2">
+            <input class="likert-input sr-only" type="radio" name="${name}" value="${value}" />
+            <span class="flex h-10 w-10 items-center justify-center rounded-full border border-slate-300 bg-white text-sm font-bold text-slate-700 transition">${value}</span>
+          </label>
+        `).join("");
+
+        return `
+          <fieldset class="rounded-lg border border-slate-200 bg-slate-50 p-4">
+            <legend class="text-sm font-bold leading-6 text-slate-900">${escapeHtml(label)}</legend>
+            <div class="mt-4 flex items-center justify-between gap-2">${options}</div>
+            <div class="mt-3 flex justify-between text-xs font-semibold text-slate-500">
+              <span>Strongly disagree</span>
+              <span>Strongly agree</span>
+            </div>
+          </fieldset>
+        `;
+      }
+
+      function collectRadioValues(names) {
+        const values = {};
+        let isComplete = true;
+        names.forEach((name) => {
+          const selected = document.querySelector(`input[name="${name}"]:checked`);
+          values[name] = selected ? selected.value : "";
+          if (!selected) {
+            isComplete = false;
+          }
+        });
+        return { values, isComplete };
+      }
+
+      function startExperiment() {
+        const survey = collectRadioValues(["pre_ai_familiarity", "pre_ai_limits", "pre_attention"]);
+        if (!survey.isComplete) {
+          document.getElementById("welcomeError").classList.remove("hidden");
+          return;
+        }
+
+        state.preSurvey = {
+          ...survey.values,
+          pre_attention_passed: survey.values.pre_attention === "3"
+        };
+        state.stimulusPool = buildStimulusPool();
+        state.trialOrder = state.stimulusPool.slice(0, trialCount);
+        state.currentTrialIndex = 0;
+        state.responses = [];
+        renderTrial();
+      }
+
+      function renderTrial() {
+        const stimulus = state.trialOrder[state.currentTrialIndex];
+        const applicant = stimulus.applicant;
+        const condition = conditions[state.conditionKey];
+        const trialNumber = state.currentTrialIndex + 1;
+        const progressPercent = Math.round((trialNumber / state.trialOrder.length) * 100);
+        const tone = decisionTone(applicant.aiRecommendation);
+
+        cancelAnimationFrame(state.timerFrame);
+        state.timerFrame = null;
+        state.decisionLocked = false;
+        state.pendingResponse = null;
+
+        app.innerHTML = `
+          <div class="flex min-h-screen flex-col">
+            <header class="border-b border-slate-200 bg-white">
+              <div class="mx-auto max-w-6xl px-6 py-5">
+                <div class="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
+                  <div>
+                    <p class="text-sm font-semibold uppercase tracking-wide text-slate-500">AI-assisted decision task</p>
+                    <h1 class="mt-1 text-2xl font-extrabold tracking-normal text-slate-950">Trial ${trialNumber} / ${state.trialOrder.length}</h1>
+                    <p class="mt-1 text-sm font-semibold text-slate-600">Condition: ${escapeHtml(condition.label)}</p>
+                  </div>
+
+                  <div class="w-full max-w-xl">
+                    <div class="mb-2 flex items-center justify-between">
+                      <span id="timerModeLabel" class="text-sm font-bold text-slate-700">${condition.durationMs ? "Time remaining" : "No countdown"}</span>
+                      <span id="timerText" class="rounded-md border border-slate-200 bg-slate-50 px-3 py-1 text-lg font-extrabold tabular-nums text-slate-800">
+                        ${condition.durationMs ? `${(condition.durationMs / 1000).toFixed(2).padStart(5, "0")}s` : "No limit"}
+                      </span>
+                    </div>
+                    <div class="h-3 overflow-hidden rounded-full bg-slate-200" aria-label="Trial progress">
+                      <div id="timerBar" class="timer-bar h-full rounded-full ${condition.durationMs ? "bg-red-600" : "bg-slate-400"}" style="width:${condition.durationMs ? "100" : progressPercent}%"></div>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </header>
+
+            <main class="mx-auto grid w-full max-w-6xl flex-1 grid-cols-1 gap-6 px-6 py-8 lg:grid-cols-[0.92fr_1.08fr]">
+              <section class="rounded-lg border border-slate-200 bg-white p-6 shadow-sm">
+                <div class="mb-5 flex items-start justify-between gap-4">
+                  <div>
+                    <p class="text-sm font-semibold uppercase tracking-wide text-slate-500">Applicant data</p>
+                    <h2 class="mt-1 text-xl font-bold text-slate-950">Loan application summary</h2>
+                  </div>
+                  <span class="rounded-md border border-slate-200 bg-slate-50 px-3 py-1 text-sm font-semibold text-slate-600">${escapeHtml(applicant.applicantId)}</span>
+                </div>
+
+                <div class="overflow-hidden rounded-lg border border-slate-200">
+                  <table class="w-full border-collapse text-left">
+                    <tbody class="divide-y divide-slate-200">
+                      ${profileRow("Age", applicant.age)}
+                      ${profileRow("Annual income", formatCurrency(applicant.income))}
+                      ${profileRow("Requested loan", formatCurrency(applicant.loanAmount))}
+                      ${profileRow("Credit score", applicant.creditScore)}
+                      ${profileRow("Employment history", `${applicant.employmentYears.toFixed(1)} years`)}
+                      ${profileRow("Savings", formatCurrency(applicant.savings))}
+                    </tbody>
+                  </table>
+                </div>
+              </section>
+
+              <section class="rounded-lg border border-slate-200 bg-white p-6 shadow-sm">
+                <p class="text-sm font-semibold uppercase tracking-wide text-slate-500">AI advice</p>
+                <div class="mt-3 rounded-lg border p-5 ${tone.badge}">
+                  <p class="text-sm font-bold uppercase tracking-wide">AI recommendation</p>
+                  <p class="mt-2 text-4xl font-extrabold tracking-normal">${applicant.aiRecommendation}</p>
+                </div>
+
+                <div class="mt-6 grid gap-4">
+                  ${cueCard(stimulus.cues[0], 1)}
+                  ${cueCard(stimulus.cues[1], 2)}
+                </div>
+              </section>
+            </main>
+
+            <footer class="border-t border-slate-200 bg-white">
+              <div class="mx-auto flex max-w-6xl flex-col gap-4 px-6 py-5 sm:flex-row">
+                <button
+                  id="agreeButton"
+                  type="button"
+                  class="flex-1 rounded-lg border border-slate-300 bg-white px-6 py-5 text-xl font-extrabold text-slate-950 shadow-sm transition hover:bg-slate-50 focus:outline-none focus:ring-4 focus:ring-slate-200"
+                >
+                  Agree with AI
+                </button>
+                <button
+                  id="overrideButton"
+                  type="button"
+                  class="flex-1 rounded-lg border border-slate-300 bg-white px-6 py-5 text-xl font-extrabold text-slate-950 shadow-sm transition hover:bg-slate-50 focus:outline-none focus:ring-4 focus:ring-slate-200"
+                >
+                  Override AI
+                </button>
+              </div>
+            </footer>
+          </div>
+        `;
+
+        document.getElementById("agreeButton").addEventListener("click", () => recordDecision("agree_ai"));
+        document.getElementById("overrideButton").addEventListener("click", () => recordDecision("override_ai"));
+        state.trialStartMs = performance.now();
+        startTimer();
+      }
+
+      function profileRow(label, value) {
+        return `
+          <tr>
+            <th class="bg-slate-50 px-4 py-3 text-sm font-semibold text-slate-600">${escapeHtml(label)}</th>
+            <td class="px-4 py-3 text-lg font-bold tabular-nums text-slate-950">${escapeHtml(value)}</td>
+          </tr>
+        `;
+      }
+
+      function cueCard(cue, cueIndex) {
+        return `
+          <article class="rounded-lg border border-slate-200 bg-slate-50 p-5">
+            <div class="mb-3 flex items-center justify-between gap-3">
+              <h3 class="text-base font-extrabold text-slate-950">Cue ${cueIndex}: ${escapeHtml(cue.type)}</h3>
+              <span class="rounded-md border border-slate-200 bg-white px-2 py-1 text-xs font-bold uppercase tracking-wide text-slate-500">Info ${cueIndex}</span>
+            </div>
+            <p class="text-base leading-7 text-slate-800">${escapeHtml(cue.text)}</p>
+          </article>
+        `;
+      }
+
+      function startTimer() {
+        const condition = conditions[state.conditionKey];
+        const timerText = document.getElementById("timerText");
+        const timerBar = document.getElementById("timerBar");
+
+        if (!condition.durationMs) {
+          return;
+        }
+
+        function updateTimer() {
+          if (state.decisionLocked) {
+            return;
+          }
+
+          const elapsed = performance.now() - state.trialStartMs;
+          const remaining = Math.max(condition.durationMs - elapsed, 0);
+          const percentage = (remaining / condition.durationMs) * 100;
+
+          timerText.textContent = `${(remaining / 1000).toFixed(2).padStart(5, "0")}s`;
+          timerBar.style.width = `${percentage}%`;
+
+          if (remaining <= 0) {
+            recordDecision("timeout");
+            return;
+          }
+
+          state.timerFrame = requestAnimationFrame(updateTimer);
+        }
+
+        state.timerFrame = requestAnimationFrame(updateTimer);
+      }
+
+      function recordDecision(userChoice) {
+        if (state.decisionLocked) {
+          return;
+        }
+
+        state.decisionLocked = true;
+        cancelAnimationFrame(state.timerFrame);
+        state.timerFrame = null;
+
+        const stimulus = state.trialOrder[state.currentTrialIndex];
+        const applicant = stimulus.applicant;
+        const condition = conditions[state.conditionKey];
+        const reactionTimeMs = Math.max(0, Math.round(performance.now() - state.trialStartMs));
+        const userFinalDecision = userChoice === "timeout"
+          ? ""
+          : userChoice === "agree_ai"
+            ? applicant.aiRecommendation
+            : oppositeDecision(applicant.aiRecommendation);
+
+        state.pendingResponse = {
+          participant_id: state.participantId,
+          study_id: state.studyId,
+          session_id: state.sessionId,
+          seed: state.seed,
+          condition: condition.csvLabel,
+          trial_number: state.currentTrialIndex + 1,
+          trial_id: stimulus.trialId,
+          cue_combination: stimulus.cueCombination,
+          warranted_cue_id: stimulus.warrantedCue.id,
+          warranted_cue_type: stimulus.warrantedCue.type,
+          warranted_cue_text: stimulus.warrantedCue.text,
+          unwarranted_cue_id: stimulus.unwarrantedCue.id,
+          unwarranted_cue_type: stimulus.unwarrantedCue.type,
+          unwarranted_cue_text: stimulus.unwarrantedCue.text,
+          cue_1_id: stimulus.cues[0].id,
+          cue_1_category: stimulus.cues[0].category,
+          cue_1_type: stimulus.cues[0].type,
+          cue_1_text: stimulus.cues[0].text,
+          cue_2_id: stimulus.cues[1].id,
+          cue_2_category: stimulus.cues[1].category,
+          cue_2_type: stimulus.cues[1].type,
+          cue_2_text: stimulus.cues[1].text,
+          applicant_id: applicant.applicantId,
+          applicant_age: applicant.age,
+          annual_income_eur: applicant.income,
+          requested_loan_eur: applicant.loanAmount,
+          credit_score: applicant.creditScore,
+          employment_years: applicant.employmentYears,
+          savings_eur: applicant.savings,
+          loan_to_income_pct: applicant.loanToIncome,
+          savings_coverage_months: applicant.savingsCoverageMonths,
+          actual_outcome: applicant.actualOutcome,
+          ai_recommendation: applicant.aiRecommendation,
+          ai_accuracy: applicant.aiIsCorrect ? "correct" : "incorrect",
+          user_choice: userChoice,
+          user_agreed_with_ai: userChoice === "timeout" ? "" : String(userChoice === "agree_ai"),
+          user_final_decision: userFinalDecision,
+          decision_correct: userChoice === "timeout" ? "" : String(userFinalDecision === applicant.actualOutcome),
+          decision_rt_ms: reactionTimeMs,
+          decision_rt_seconds: (reactionTimeMs / 1000).toFixed(3),
+          timed_out: String(userChoice === "timeout"),
+          decision_timestamp_iso: new Date().toISOString()
+        };
+
+        openReportModal(userChoice, reactionTimeMs, stimulus);
+      }
+
+      function openReportModal(userChoice, reactionTimeMs, stimulus) {
+        reportError.classList.add("hidden");
+        reportRtBadge.textContent = `RT ${reactionTimeMs} ms`;
+        reportModalKicker.textContent = userChoice === "timeout" ? "Time elapsed" : "Decision recorded";
+
+        const options = [
+          {
+            value: "applicant_data",
+            label: "Applicant data table",
+            meta: "applicant_data"
+          },
+          {
+            value: "cue_1",
+            label: `Cue 1: ${stimulus.cues[0].type}`,
+            meta: `${stimulus.cues[0].category}:${stimulus.cues[0].id}`
+          },
+          {
+            value: "cue_2",
+            label: `Cue 2: ${stimulus.cues[1].type}`,
+            meta: `${stimulus.cues[1].category}:${stimulus.cues[1].id}`
+          },
+          {
+            value: "ai_recommendation",
+            label: "AI recommendation label",
+            meta: "ai_recommendation"
+          },
+          {
+            value: "other",
+            label: "Other or not sure",
+            meta: "other"
+          }
+        ];
+
+        reportOptions.innerHTML = options.map((option) => `
+          <label class="flex cursor-pointer items-start gap-3 rounded-lg border border-slate-200 p-4 transition hover:bg-slate-50">
+            <input
+              type="checkbox"
+              value="${escapeHtml(option.value)}"
+              data-meta="${escapeHtml(option.meta)}"
+              class="mt-1 h-5 w-5 rounded border-slate-300 text-slate-950 focus:ring-slate-400"
+            />
+            <span class="text-base font-semibold text-slate-800">${escapeHtml(option.label)}</span>
+          </label>
+        `).join("");
+
+        reportModal.classList.remove("modal-hidden");
+        submitReportButton.focus();
+      }
+
+      function closeReportModal() {
+        reportModal.classList.add("modal-hidden");
+        reportOptions.innerHTML = "";
+      }
+
+      function submitReport() {
+        const selected = Array.from(reportOptions.querySelectorAll("input[type='checkbox']:checked"));
+
+        if (selected.length === 0) {
+          reportError.classList.remove("hidden");
+          return;
+        }
+
+        const stimulus = state.trialOrder[state.currentTrialIndex];
+        const reportedValues = selected.map((input) => input.value);
+        const reportedMeta = selected.map((input) => input.dataset.meta);
+        const reportedCueIds = reportedMeta
+          .filter((value) => value.includes(":"))
+          .map((value) => value.split(":")[1]);
+        const reportedCueCategories = reportedMeta
+          .filter((value) => value.includes(":"))
+          .map((value) => value.split(":")[0]);
+
+        state.responses.push({
+          ...state.pendingResponse,
+          reported_information: reportedValues.join("|"),
+          reported_cue_ids: reportedCueIds.join("|"),
+          reported_cue_categories: reportedCueCategories.join("|"),
+          reported_warranted_cue: String(reportedCueCategories.includes("warranted")),
+          reported_unwarranted_cue: String(reportedCueCategories.includes("unwarranted")),
+          reported_applicant_data: String(reportedValues.includes("applicant_data")),
+          reported_ai_recommendation: String(reportedValues.includes("ai_recommendation")),
+          reported_other: String(reportedValues.includes("other")),
+          report_timestamp_iso: new Date().toISOString(),
+          current_warranted_cue_position: stimulus.cues.findIndex((cue) => cue.category === "warranted") + 1,
+          current_unwarranted_cue_position: stimulus.cues.findIndex((cue) => cue.category === "unwarranted") + 1
+        });
+
+        state.pendingResponse = null;
+        state.currentTrialIndex += 1;
+        closeReportModal();
+
+        if (state.currentTrialIndex >= state.trialOrder.length) {
+          renderPostSurvey();
+        } else {
+          renderTrial();
+        }
+      }
+
+      function renderPostSurvey() {
+        app.innerHTML = `
+          <section class="mx-auto flex min-h-screen max-w-4xl items-center px-6 py-10">
+            <div class="w-full rounded-lg border border-slate-200 bg-white p-8 shadow-sm">
+              <p class="text-sm font-semibold uppercase tracking-wide text-slate-500">Final questions</p>
+              <h1 class="mt-2 text-3xl font-extrabold tracking-normal text-slate-950">Post-task survey</h1>
+              <div class="mt-6 grid gap-5">
+                ${likertQuestion("post_ai_trust", "I trusted the AI recommendation during the task.", 5)}
+                ${likertQuestion("post_time_pressure", "I felt time pressure while making decisions.", 5)}
+                ${likertQuestion("post_strategy", "I tried to compare the AI cues with the applicant data.", 5)}
+                ${likertQuestion("post_attention", "Attention check: select option 4 for this item.", 5)}
+              </div>
+
+              <p id="postError" class="mt-5 hidden rounded-md border border-red-200 bg-red-50 px-4 py-3 text-sm font-semibold text-red-700">
+                Please answer all post-task questions before finishing.
+              </p>
+
+              <div class="mt-8 flex justify-end">
+                <button id="finishButton" type="button" class="rounded-lg bg-slate-950 px-6 py-3 text-base font-extrabold text-white shadow-sm transition hover:bg-slate-800 focus:outline-none focus:ring-4 focus:ring-slate-300">
+                  Finish and Download CSV
+                </button>
+              </div>
+            </div>
+          </section>
+        `;
+
+        document.getElementById("finishButton").addEventListener("click", finishExperiment);
+      }
+
+      function finishExperiment() {
+        const survey = collectRadioValues(["post_ai_trust", "post_time_pressure", "post_strategy", "post_attention"]);
+        if (!survey.isComplete) {
+          document.getElementById("postError").classList.remove("hidden");
+          return;
+        }
+
+        state.postSurvey = {
+          ...survey.values,
+          post_attention_passed: survey.values.post_attention === "4"
+        };
+
+        downloadCsv();
+        renderComplete();
+
+        if (isCompletionUrlConfigured()) {
+          window.setTimeout(() => {
+            window.location.href = PROLIFIC_COMPLETION_URL;
+          }, 1200);
+        }
+      }
+
+      function renderComplete() {
+        app.innerHTML = `
+          <section class="flex min-h-screen items-center justify-center px-6 py-12">
+            <div class="w-full max-w-3xl rounded-lg border border-slate-200 bg-white p-8 text-center shadow-sm">
+              <p class="text-sm font-semibold uppercase tracking-wide text-slate-500">Complete</p>
+              <h1 class="mt-2 text-3xl font-extrabold tracking-normal text-slate-950">Thank you</h1>
+              <p class="mx-auto mt-5 max-w-2xl leading-7 text-slate-700">
+                Your CSV download has started. If the download was blocked, use the button below.
+              </p>
+              <div class="mt-8 flex flex-col items-center justify-center gap-3 sm:flex-row">
+                <button id="downloadAgainButton" type="button" class="rounded-lg bg-slate-950 px-5 py-3 text-sm font-extrabold text-white shadow-sm transition hover:bg-slate-800 focus:outline-none focus:ring-4 focus:ring-slate-300">
+                  Download CSV Again
+                </button>
+              </div>
+            </div>
+          </section>
+        `;
+
+        document.getElementById("downloadAgainButton").addEventListener("click", downloadCsv);
+      }
+
+      function isCompletionUrlConfigured() {
+        return !PROLIFIC_COMPLETION_URL.includes("PUT_COMPLETION_CODE_HERE");
+      }
+
+      function csvValue(value) {
+        const stringValue = Array.isArray(value) ? value.join("|") : String(value ?? "");
+        return `"${stringValue.replace(/"/g, '""')}"`;
+      }
+
+      function getCsvRows() {
+        return state.responses.map((response) => ({
+          ...response,
+          pre_ai_familiarity: state.preSurvey?.pre_ai_familiarity ?? "",
+          pre_ai_limits: state.preSurvey?.pre_ai_limits ?? "",
+          pre_attention: state.preSurvey?.pre_attention ?? "",
+          pre_attention_passed: String(state.preSurvey?.pre_attention_passed ?? ""),
+          post_ai_trust: state.postSurvey?.post_ai_trust ?? "",
+          post_time_pressure: state.postSurvey?.post_time_pressure ?? "",
+          post_strategy: state.postSurvey?.post_strategy ?? "",
+          post_attention: state.postSurvey?.post_attention ?? "",
+          post_attention_passed: String(state.postSurvey?.post_attention_passed ?? "")
+        }));
+      }
+
+      function downloadCsv() {
+        const headers = [
+          "participant_id",
+          "study_id",
+          "session_id",
+          "seed",
+          "condition",
+          "trial_number",
+          "trial_id",
+          "cue_combination",
+          "warranted_cue_id",
+          "warranted_cue_type",
+          "warranted_cue_text",
+          "unwarranted_cue_id",
+          "unwarranted_cue_type",
+          "unwarranted_cue_text",
+          "cue_1_id",
+          "cue_1_category",
+          "cue_1_type",
+          "cue_1_text",
+          "cue_2_id",
+          "cue_2_category",
+          "cue_2_type",
+          "cue_2_text",
+          "applicant_id",
+          "applicant_age",
+          "annual_income_eur",
+          "requested_loan_eur",
+          "credit_score",
+          "employment_years",
+          "savings_eur",
+          "loan_to_income_pct",
+          "savings_coverage_months",
+          "actual_outcome",
+          "ai_recommendation",
+          "ai_accuracy",
+          "user_choice",
+          "user_agreed_with_ai",
+          "user_final_decision",
+          "decision_correct",
+          "decision_rt_ms",
+          "decision_rt_seconds",
+          "timed_out",
+          "decision_timestamp_iso",
+          "reported_information",
+          "reported_cue_ids",
+          "reported_cue_categories",
+          "reported_warranted_cue",
+          "reported_unwarranted_cue",
+          "reported_applicant_data",
+          "reported_ai_recommendation",
+          "reported_other",
+          "report_timestamp_iso",
+          "current_warranted_cue_position",
+          "current_unwarranted_cue_position",
+          "pre_ai_familiarity",
+          "pre_ai_limits",
+          "pre_attention",
+          "pre_attention_passed",
+          "post_ai_trust",
+          "post_time_pressure",
+          "post_strategy",
+          "post_attention",
+          "post_attention_passed"
+        ];
+        const rows = getCsvRows().map((row) => headers.map((header) => csvValue(row[header])).join(","));
+        const csv = `\uFEFF${[headers.join(","), ...rows].join("\r\n")}`;
+        const blob = new Blob([csv], { type: "text/csv;charset=utf-8" });
+        const url = URL.createObjectURL(blob);
+        const link = document.createElement("a");
+        const timestamp = new Date().toISOString().replace(/[:.]/g, "-");
+
+        link.href = url;
+        link.download = `ai-loan-decision-${participantId}-${timestamp}.csv`;
+        document.body.appendChild(link);
+        link.click();
+        link.remove();
+        window.setTimeout(() => URL.revokeObjectURL(url), 0);
+      }
+
+      submitReportButton.addEventListener("click", submitReport);
+      state.stimulusPool = buildStimulusPool();
+      renderWelcome();
+    })();
+  </script>
+</body>
+</html>

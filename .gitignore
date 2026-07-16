@@ -1,0 +1,6 @@
+*.csv
+.git-codex/
+.agents/
+.codex/
+.DS_Store
+Thumbs.db
