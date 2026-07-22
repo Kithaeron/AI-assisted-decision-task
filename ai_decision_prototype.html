@@ -72,7 +72,8 @@
     (() => {
       "use strict";
 
-      // EVIDENCE_REQUIRED: The fixed applicant profiles are candidate high-conflict stimuli. A separate no-AI validation study is required to estimate approval rates for all 60 profiles.
+      // EVIDENCE_REQUIRED: These fixed profiles are model-estimated candidate high-conflict stimuli, not empirically validated 50/50 cases.
+      // The six counterbalance lists embed no-AI ratings across the formal study, but those observed rates must remain distinct from model estimates.
       const FIXED_STIMULI = window.FIXED_STIMULI;
       const STIMULUS_SET_VERSION = window.STIMULUS_SET_VERSION;
       if (!Array.isArray(FIXED_STIMULI) || FIXED_STIMULI.length !== 60) {
@@ -80,6 +81,14 @@
       }
       const TOTAL_SESSION_TRIALS = FIXED_STIMULI.length;
       const PROLIFIC_COMPLETION_URL = "https://app.prolific.com/submissions/complete?cc=PUT_COMPLETION_CODE_HERE";
+      const COUNTERBALANCE_CONDITIONS = [
+        { key: "no_ai", trialType: "no_ai_baseline", trialPhase: "phase_1_no_ai", cueIds: [] },
+        { key: "ai_only", trialType: "ai_only_baseline", trialPhase: "phase_2_ai_only", cueIds: [] },
+        { key: "W1_U1", trialType: "ai_plus_cues", trialPhase: "phase_3_ai_plus_cues", cueIds: ["W1", "U1"] },
+        { key: "W1_U2", trialType: "ai_plus_cues", trialPhase: "phase_3_ai_plus_cues", cueIds: ["W1", "U2"] },
+        { key: "W2_U1", trialType: "ai_plus_cues", trialPhase: "phase_3_ai_plus_cues", cueIds: ["W2", "U1"] },
+        { key: "W2_U2", trialType: "ai_plus_cues", trialPhase: "phase_3_ai_plus_cues", cueIds: ["W2", "U2"] }
+      ];
 
       const conditions = {
         pressure: {
@@ -105,6 +114,10 @@
       const seedParam = params.get("seed") || participantId;
       const trialCount = TOTAL_SESSION_TRIALS;
       const initialConditionKey = normalizeCondition(params.get("condition") || params.get("time_pressure"));
+      const counterbalance = resolveCounterbalanceList(
+        params.get("counterbalance_list") || params.get("list"),
+        participantId
+      );
 
       const app = document.getElementById("app");
       const reportModal = document.getElementById("reportModal");
@@ -120,6 +133,8 @@
         sessionId,
         seed: seedParam,
         conditionKey: initialConditionKey,
+        counterbalanceList: counterbalance.list,
+        counterbalanceListSource: counterbalance.source,
         trialOrder: [],
         currentTrialIndex: 0,
         trialStartMs: 0,
@@ -137,6 +152,17 @@
           return "no_pressure";
         }
         return "pressure";
+      }
+
+      function resolveCounterbalanceList(value, stableParticipantId) {
+        const parsed = Number.parseInt(value, 10);
+        if (Number.isInteger(parsed) && parsed >= 1 && parsed <= 6) {
+          return { list: parsed, source: "url_parameter" };
+        }
+        return {
+          list: (hashString(stableParticipantId) % COUNTERBALANCE_CONDITIONS.length) + 1,
+          source: "participant_hash_fallback"
+        };
       }
 
       function hashString(value) {
@@ -206,12 +232,42 @@
         };
       }
 
+      function materializeStimulus(profile, profileIndex) {
+        const blockIndex = Math.floor(profileIndex / 10);
+        const listIndex = state.counterbalanceList - 1;
+        const assignedIndex = (blockIndex - listIndex + COUNTERBALANCE_CONDITIONS.length)
+          % COUNTERBALANCE_CONDITIONS.length;
+        const assigned = COUNTERBALANCE_CONDITIONS[assignedIndex];
+        let cues = assigned.cueIds.map((cueId) => ({ ...profile.cueBank[cueId] }));
+
+        // Presentation order is fixed for each applicant-condition pairing and never depends on the participant.
+        if (cues.length === 2 && (profileIndex + assignedIndex) % 2 === 1) {
+          cues = [...cues].reverse();
+        }
+        cues = cues.map((cue, cueIndex) => ({ ...cue, presentationPosition: cueIndex + 1 }));
+
+        return {
+          ...profile,
+          applicant: { ...profile.applicant },
+          counterbalanceBlock: blockIndex + 1,
+          assignedCondition: assigned.key,
+          trialType: assigned.trialType,
+          trialPhase: assigned.trialPhase,
+          cueCombination: assigned.key.startsWith("W") ? assigned.key : "none",
+          cues,
+          warrantedCue: cues.find((cue) => cue.category === "warranted") ?? null,
+          unwarrantedCue: cues.find((cue) => cue.category === "unwarranted") ?? null,
+          askRetrospectiveReport: assigned.trialType === "ai_plus_cues"
+        };
+      }
+
       function buildTrialOrder() {
         const random = mulberry32(hashString(`${state.seed}-presentation-order`));
         const phases = ["phase_1_no_ai", "phase_2_ai_only", "phase_3_ai_plus_cues"];
+        const assignedStimuli = FIXED_STIMULI.map(materializeStimulus);
 
         return phases.flatMap((phase) => {
-          const phaseTrials = FIXED_STIMULI
+          const phaseTrials = assignedStimuli
             .filter((stimulus) => stimulus.trialPhase === phase)
             .map(cloneStimulus);
           return shuffle(phaseTrials, random);
@@ -417,6 +473,9 @@
                     </tbody>
                   </table>
                 </div>
+                <p class="mt-3 text-xs leading-5 text-slate-600">
+                  Credit scores range from 0 to 1000, with higher scores indicating lower estimated credit risk.
+                </p>
               </section>
 
               ${decisionSupportPanel(stimulus, tone)}
@@ -574,6 +633,10 @@
           seed: state.seed,
           stimulus_set_version: STIMULUS_SET_VERSION,
           condition: condition.csvLabel,
+          counterbalance_list: state.counterbalanceList,
+          counterbalance_list_source: state.counterbalanceListSource,
+          counterbalance_block: stimulus.counterbalanceBlock,
+          assigned_condition: stimulus.assignedCondition,
           trial_number: state.currentTrialIndex + 1,
           presentation_order: state.currentTrialIndex + 1,
           trial_id: stimulus.trialId,
@@ -581,8 +644,12 @@
           trial_phase: stimulus.trialPhase,
           report_prompt_shown: String(stimulus.askRetrospectiveReport),
           conflict_validation_status: stimulus.conflictValidationStatus,
-          pilot_approve_rate: stimulus.pilotApproveRate,
-          candidate_conflict_score: applicant.candidateConflictScore,
+          observed_no_ai_approve_rate: stimulus.observedNoAiApproveRate,
+          model_estimated_approval_propensity: applicant.modelEstimatedApprovalPropensity,
+          model_latent_score: applicant.modelLatentScore,
+          affordability_signal: applicant.affordabilitySignal,
+          credit_signal: applicant.creditSignal,
+          savings_signal: applicant.savingsSignal,
           cue_combination: stimulus.cueCombination,
           warranted_cue_id: warrantedCue?.id ?? "",
           warranted_cue_type: warrantedCue?.type ?? "",
@@ -612,15 +679,18 @@
           repayment_term_years: applicant.repaymentTermYears,
           credit_score: applicant.creditScore,
           savings_eur: applicant.savings,
-          loan_to_income_pct: applicant.loanToIncome,
-          savings_to_loan_pct: applicant.savingsToLoan,
-          actual_outcome: applicant.actualOutcome,
+          annual_repayment_burden_pct: applicant.annualRepaymentBurdenPct,
+          loan_to_income_pct: applicant.loanToIncomePct,
+          savings_to_loan_pct: applicant.savingsToLoanPct,
+          model_estimated_class: applicant.modelEstimatedClass,
           ai_recommendation: aiWasShown ? applicant.aiRecommendation : "",
-          ai_accuracy: aiWasShown ? (applicant.aiIsCorrect ? "correct" : "incorrect") : "",
+          ai_matches_model_estimate_synthetic: aiWasShown ? String(applicant.aiIsCorrect) : "",
           user_choice: userChoice,
           user_agreed_with_ai: userChoice === "timeout" || !aiWasShown ? "" : String(userChoice === "agree_ai"),
           user_final_decision: userFinalDecision,
-          decision_correct: userChoice === "timeout" ? "" : String(userFinalDecision === applicant.actualOutcome),
+          user_decision_matches_model_estimate: userChoice === "timeout"
+            ? ""
+            : String(userFinalDecision === applicant.modelEstimatedClass),
           decision_rt_ms: reactionTimeMs,
           decision_rt_seconds: (reactionTimeMs / 1000).toFixed(3),
           timed_out: String(userChoice === "timeout"),
@@ -846,6 +916,10 @@
           "seed",
           "stimulus_set_version",
           "condition",
+          "counterbalance_list",
+          "counterbalance_list_source",
+          "counterbalance_block",
+          "assigned_condition",
           "trial_number",
           "presentation_order",
           "trial_id",
@@ -853,8 +927,12 @@
           "trial_phase",
           "report_prompt_shown",
           "conflict_validation_status",
-          "pilot_approve_rate",
-          "candidate_conflict_score",
+          "observed_no_ai_approve_rate",
+          "model_estimated_approval_propensity",
+          "model_latent_score",
+          "affordability_signal",
+          "credit_signal",
+          "savings_signal",
           "cue_combination",
           "warranted_cue_id",
           "warranted_cue_type",
@@ -884,15 +962,16 @@
           "repayment_term_years",
           "credit_score",
           "savings_eur",
+          "annual_repayment_burden_pct",
           "loan_to_income_pct",
           "savings_to_loan_pct",
-          "actual_outcome",
+          "model_estimated_class",
           "ai_recommendation",
-          "ai_accuracy",
+          "ai_matches_model_estimate_synthetic",
           "user_choice",
           "user_agreed_with_ai",
           "user_final_decision",
-          "decision_correct",
+          "user_decision_matches_model_estimate",
           "decision_rt_ms",
           "decision_rt_seconds",
           "timed_out",
