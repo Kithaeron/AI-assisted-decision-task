@@ -67,38 +67,26 @@
     </div>
   </div>
 
+  <script src="./fixed_stimuli.js"></script>
   <script>
     (() => {
       "use strict";
 
-      const STIMULUS_POOL_SIZE = 240;
-      const DEFAULT_SESSION_TRIALS = 24;
-      const MAX_SESSION_TRIALS = STIMULUS_POOL_SIZE;
+      // EVIDENCE_REQUIRED: The fixed applicant profiles are candidate high-conflict stimuli. A separate no-AI validation study is required to estimate approval rates for all 60 profiles.
+      const FIXED_STIMULI = window.FIXED_STIMULI;
+      const STIMULUS_SET_VERSION = window.STIMULUS_SET_VERSION;
+      if (!Array.isArray(FIXED_STIMULI) || FIXED_STIMULI.length !== 60) {
+        throw new Error("The fixed 60-trial stimulus manifest failed to load.");
+      }
+      const TOTAL_SESSION_TRIALS = FIXED_STIMULI.length;
       const PROLIFIC_COMPLETION_URL = "https://app.prolific.com/submissions/complete?cc=PUT_COMPLETION_CODE_HERE";
-
-      const WARRANTED_CUES = {
-        W1: "Feature Explanation",
-        W2: "Historical Reliability"
-      };
-
-      const UNWARRANTED_CUES = {
-        U1: "Raw Confidence Score",
-        U2: "Social Consensus"
-      };
-
-      const CUE_PAIRS = [
-        ["W1", "U1"],
-        ["W1", "U2"],
-        ["W2", "U1"],
-        ["W2", "U2"]
-      ];
 
       const conditions = {
         pressure: {
           key: "pressure",
-          label: "5-second time pressure",
-          csvLabel: "5_seconds",
-          durationMs: 5000
+          label: "10-second time pressure",
+          csvLabel: "10_seconds",
+          durationMs: 10000
         },
         no_pressure: {
           key: "no_pressure",
@@ -114,11 +102,8 @@
       const studyId = params.get("STUDY_ID") || "";
       const sessionParam = params.get("SESSION_ID") || "";
       const sessionId = sessionParam || `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
-      const seedParam = params.get("seed") || `${participantId}-${sessionId}`;
-      const requestedTrials = Number.parseInt(params.get("trials"), 10);
-      const trialCount = Number.isFinite(requestedTrials)
-        ? Math.min(Math.max(requestedTrials, 1), MAX_SESSION_TRIALS)
-        : DEFAULT_SESSION_TRIALS;
+      const seedParam = params.get("seed") || participantId;
+      const trialCount = TOTAL_SESSION_TRIALS;
       const initialConditionKey = normalizeCondition(params.get("condition") || params.get("time_pressure"));
 
       const app = document.getElementById("app");
@@ -135,7 +120,6 @@
         sessionId,
         seed: seedParam,
         conditionKey: initialConditionKey,
-        stimulusPool: [],
         trialOrder: [],
         currentTrialIndex: 0,
         trialStartMs: 0,
@@ -183,17 +167,8 @@
         return copy;
       }
 
-      function choose(items, random) {
-        return items[Math.floor(random() * items.length)];
-      }
-
-      function randomInt(min, max, step, random) {
-        const steps = Math.floor((max - min) / step);
-        return min + Math.floor(random() * (steps + 1)) * step;
-      }
-
       function formatCurrency(value) {
-        return `EUR ${Number(value).toLocaleString("en-US")}`;
+        return `€${Number(value).toLocaleString("en-US")}`;
       }
 
       function escapeHtml(value) {
@@ -221,196 +196,26 @@
             };
       }
 
-      function generateApplicant(index, random) {
-        const income = randomInt(28000, 110000, 1000, random);
-        const loanAmount = randomInt(6000, 42000, 500, random);
-        const creditScore = randomInt(540, 790, 5, random);
-        const age = randomInt(23, 64, 1, random);
-        const employmentYears = Math.round((0.5 + random() * 14.5) * 10) / 10;
-        const savings = randomInt(500, 36000, 500, random);
-        const loanToIncome = Math.round((loanAmount / income) * 100);
-        const savingsToLoan = Math.round((savings / loanAmount) * 100);
-
-        const riskScore =
-          (loanToIncome - 24) * 1.25 +
-          (660 - creditScore) * 0.16 +
-          Math.min(employmentYears, 10) * 1.1 -
-          Math.min(savingsToLoan, 60) * 0.15 +
-          (age < 25 ? 3 : 0) +
-          (random() - 0.5) * 18;
-
-        const actualOutcome = riskScore >= 0 ? "REJECT" : "APPROVE";
-        const aiIsCorrect = random() < 0.78;
-        const aiRecommendation = aiIsCorrect ? actualOutcome : oppositeDecision(actualOutcome);
-
+      function cloneStimulus(stimulus) {
         return {
-          applicantId: `A${String(index + 1).padStart(3, "0")}`,
-          age,
-          income,
-          loanAmount,
-          creditScore,
-          employmentYears,
-          savings,
-          loanToIncome,
-          savingsToLoan,
-          actualOutcome,
-          aiRecommendation,
-          aiIsCorrect
+          ...stimulus,
+          applicant: { ...stimulus.applicant },
+          cues: stimulus.cues.map((cue) => ({ ...cue })),
+          warrantedCue: stimulus.warrantedCue ? { ...stimulus.warrantedCue } : null,
+          unwarrantedCue: stimulus.unwarrantedCue ? { ...stimulus.unwarrantedCue } : null
         };
       }
 
-      function buildFeatureExplanation(applicant, random) {
-        const loanThreshold = 24;
-        const creditCutoff = 660;
-        const savingsFloor = 20;
-        const employmentFloor = 2;
-        const rejectTemplates = [];
-        const approveTemplates = [];
-        const savingsSignal = applicant.savingsToLoan >= 100 ? "savings exceed loan" : `savings ${applicant.savingsToLoan}%`;
+      function buildTrialOrder() {
+        const random = mulberry32(hashString(`${state.seed}-presentation-order`));
+        const phases = ["phase_1_no_ai", "phase_2_ai_only", "phase_3_ai_plus_cues"];
 
-        if (applicant.loanToIncome > loanThreshold) {
-          rejectTemplates.push(`Loan is ${applicant.loanToIncome}% of income, above ${loanThreshold}%, load raises risk.`);
-        } else {
-          approveTemplates.push(`Loan is ${applicant.loanToIncome}% of income, within ${loanThreshold}%, load is manageable.`);
-        }
-
-        if (applicant.creditScore < creditCutoff) {
-          rejectTemplates.push(`Score ${applicant.creditScore} is below ${creditCutoff}, credit risk is higher.`);
-        } else {
-          approveTemplates.push(`Score ${applicant.creditScore} meets ${creditCutoff}, credit risk is lower.`);
-        }
-
-        if (applicant.savingsToLoan < savingsFloor) {
-          rejectTemplates.push(`Savings are ${applicant.savingsToLoan}% of loan; buffer is weak.`);
-        } else if (applicant.savingsToLoan >= 100) {
-          approveTemplates.push("Savings exceed loan amount; buffer supports repayment.");
-        } else {
-          approveTemplates.push(`Savings are ${applicant.savingsToLoan}% of loan; buffer supports repayment.`);
-        }
-
-        if (applicant.employmentYears < employmentFloor) {
-          rejectTemplates.push(`Employment is ${applicant.employmentYears} yrs, short history adds risk.`);
-        } else {
-          approveTemplates.push(`Employment is ${applicant.employmentYears} yrs, stability supports repayment.`);
-        }
-
-        if (rejectTemplates.length === 0) {
-          rejectTemplates.push(`Combined: loan ${applicant.loanToIncome}%, score ${applicant.creditScore}, ${savingsSignal}; above cutoff.`);
-        }
-
-        if (approveTemplates.length === 0) {
-          approveTemplates.push(`Combined: loan ${applicant.loanToIncome}%, score ${applicant.creditScore}, ${savingsSignal}; below cutoff.`);
-        }
-
-        return choose(applicant.aiRecommendation === "REJECT" ? rejectTemplates : approveTemplates, random);
-      }
-
-      function buildHistoricalReliability(applicant, random) {
-        const sampleSize = randomInt(420, 2600, 20, random);
-        const reliability = randomInt(72, 91, 1, random);
-        const creditBandLow = Math.max(500, Math.floor(applicant.creditScore / 25) * 25);
-        const creditBandHigh = creditBandLow + 24;
-        const loanBandLow = Math.max(0, Math.floor(applicant.loanToIncome / 10) * 10);
-        const loanBandHigh = loanBandLow + 9;
-        const templates = [
-          `For similar credit scores, the AI was right ${reliability}% of the time.`,
-          `For similar loan size, the AI was right ${reliability}% of the time.`,
-          `In ${sampleSize} similar cases, this advice was right ${reliability}% of the time.`
-        ];
-        return choose(templates, random);
-      }
-
-      function buildRawConfidence(applicant, random) {
-        const confidence = randomInt(71, 99, 1, random) + choose([0.1, 0.2, 0.4, 0.6, 0.8], random);
-        const templates = [
-          `AI confidence: ${confidence.toFixed(1)}%.`,
-          `System confidence: ${confidence.toFixed(1)}%.`,
-          `Confidence score: ${confidence.toFixed(1)}/100.`
-        ];
-        return {
-          text: choose(templates, random),
-          confidence: confidence.toFixed(1)
-        };
-      }
-
-      function buildSocialConsensus(applicant, random) {
-        const consensus = randomInt(62, 94, 1, random);
-        const group = choose(["reviewers", "loan officers", "prior decision makers", "credit assessors"], random);
-        const templates = [
-          `${consensus}% of ${group} chose the same action.`,
-          `${consensus}% of ${group} agreed with the AI.`,
-          `${consensus}% of ${group} usually follow this advice.`
-        ];
-        return {
-          text: choose(templates, random),
-          consensus
-        };
-      }
-
-      function buildCue(cueId, applicant, random) {
-        if (cueId === "W1") {
-          return {
-            id: "W1",
-            category: "warranted",
-            type: WARRANTED_CUES.W1,
-            text: buildFeatureExplanation(applicant, random),
-            metric: ""
-          };
-        }
-
-        if (cueId === "W2") {
-          return {
-            id: "W2",
-            category: "warranted",
-            type: WARRANTED_CUES.W2,
-            text: buildHistoricalReliability(applicant, random),
-            metric: ""
-          };
-        }
-
-        if (cueId === "U1") {
-          const rawConfidence = buildRawConfidence(applicant, random);
-          return {
-            id: "U1",
-            category: "unwarranted",
-            type: UNWARRANTED_CUES.U1,
-            text: rawConfidence.text,
-            metric: rawConfidence.confidence
-          };
-        }
-
-        const socialConsensus = buildSocialConsensus(applicant, random);
-        return {
-          id: "U2",
-          category: "unwarranted",
-          type: UNWARRANTED_CUES.U2,
-          text: socialConsensus.text,
-          metric: socialConsensus.consensus
-        };
-      }
-
-      function buildStimulusPool() {
-        const random = mulberry32(hashString(state.seed));
-        const stimuli = [];
-
-        for (let index = 0; index < STIMULUS_POOL_SIZE; index += 1) {
-          const [warrantedCueId, unwarrantedCueId] = CUE_PAIRS[index % CUE_PAIRS.length];
-          const applicant = generateApplicant(index, random);
-          const warrantedCue = buildCue(warrantedCueId, applicant, random);
-          const unwarrantedCue = buildCue(unwarrantedCueId, applicant, random);
-          const cues = random() < 0.5 ? [warrantedCue, unwarrantedCue] : [unwarrantedCue, warrantedCue];
-
-          stimuli.push({
-            trialId: `T${String(index + 1).padStart(3, "0")}`,
-            cueCombination: `${warrantedCueId}_${unwarrantedCueId}`,
-            applicant,
-            cues,
-            warrantedCue,
-            unwarrantedCue
-          });
-        }
-
-        return shuffle(stimuli, random);
+        return phases.flatMap((phase) => {
+          const phaseTrials = FIXED_STIMULI
+            .filter((stimulus) => stimulus.trialPhase === phase)
+            .map(cloneStimulus);
+          return shuffle(phaseTrials, random);
+        });
       }
 
       function renderWelcome() {
@@ -422,13 +227,13 @@
                 <div>
                   <h1 class="text-3xl font-extrabold tracking-normal text-slate-950">AI-assisted loan decision task</h1>
                   <p class="mt-4 max-w-3xl leading-7 text-slate-700">
-                    Review each applicant and the AI advice, then choose whether to agree with or override the AI recommendation.
+                    Review each application and make the best loan decision. Some trials include AI advice or additional information.
                   </p>
                 </div>
                 <div class="rounded-lg border border-slate-200 bg-slate-50 px-4 py-3 text-sm font-semibold text-slate-700">
                   <div>Participant: <span class="tabular-nums">${escapeHtml(participantId)}</span></div>
                   <div class="mt-1">Trials this session: <span class="tabular-nums">${trialCount}</span></div>
-                  <div class="mt-1">Stimulus pool: <span class="tabular-nums">${STIMULUS_POOL_SIZE}</span></div>
+                  <div class="mt-1">Structure: <span class="tabular-nums">10 no-AI, 10 AI-only, 40 with additional information</span></div>
                 </div>
               </div>
 
@@ -496,7 +301,7 @@
 
         return `
           <div class="mt-4 grid gap-3" role="group" aria-label="Experimental condition">
-                    ${conditionButton("pressure", "5-second countdown")}
+            ${conditionButton("pressure", "10-second countdown")}
             ${conditionButton("no_pressure", "No time limit")}
           </div>
         `;
@@ -546,8 +351,7 @@
           ...survey.values,
           pre_attention_passed: survey.values.pre_attention === "3"
         };
-        state.stimulusPool = buildStimulusPool();
-        state.trialOrder = state.stimulusPool.slice(0, trialCount);
+        state.trialOrder = buildTrialOrder();
         state.currentTrialIndex = 0;
         state.responses = [];
         renderTrial();
@@ -605,56 +409,81 @@
                 <div class="overflow-hidden rounded-lg border border-slate-200">
                   <table class="w-full border-collapse text-left">
                     <tbody class="divide-y divide-slate-200">
-                      ${profileRow("Age", applicant.age)}
-                      ${profileRow("Annual income", formatCurrency(applicant.income))}
                       ${profileRow("Requested loan", formatCurrency(applicant.loanAmount))}
-                      ${profileRow("Credit score", applicant.creditScore)}
-                      ${profileRow("Employment history", `${applicant.employmentYears.toFixed(1)} years`)}
+                      ${profileRow("Repayment term", `${applicant.repaymentTermYears} ${applicant.repaymentTermYears === 1 ? "year" : "years"}`)}
+                      ${profileRow("Annual income", formatCurrency(applicant.income))}
+                      ${profileRow("Credit score", `${applicant.creditScore} / 1000`)}
                       ${profileRow("Savings", formatCurrency(applicant.savings))}
                     </tbody>
                   </table>
                 </div>
               </section>
 
-              <section class="rounded-lg border border-slate-200 bg-white p-6 shadow-sm">
-                <p class="text-sm font-semibold uppercase tracking-wide text-slate-500">AI advice</p>
-                <div class="mt-3 rounded-lg border p-5 ${tone.badge}">
-                  <p class="text-sm font-bold uppercase tracking-wide">AI recommendation</p>
-                  <p class="mt-2 text-4xl font-extrabold tracking-normal">${applicant.aiRecommendation}</p>
-                </div>
-
-                <div class="mt-6 grid gap-4">
-                  ${cueCard(stimulus.cues[0], 1)}
-                  ${cueCard(stimulus.cues[1], 2)}
-                </div>
-              </section>
+              ${decisionSupportPanel(stimulus, tone)}
             </main>
 
             <footer class="border-t border-slate-200 bg-white">
               <div class="mx-auto flex max-w-6xl flex-col gap-4 px-6 py-5 sm:flex-row">
-                <button
-                  id="agreeButton"
-                  type="button"
-                  class="flex-1 rounded-lg border border-slate-300 bg-white px-6 py-5 text-xl font-extrabold text-slate-950 shadow-sm transition hover:bg-slate-50 focus:outline-none focus:ring-4 focus:ring-slate-200"
-                >
-                  Agree with AI
-                </button>
-                <button
-                  id="overrideButton"
-                  type="button"
-                  class="flex-1 rounded-lg border border-slate-300 bg-white px-6 py-5 text-xl font-extrabold text-slate-950 shadow-sm transition hover:bg-slate-50 focus:outline-none focus:ring-4 focus:ring-slate-200"
-                >
-                  Override AI
-                </button>
+                ${decisionButtons(stimulus)}
               </div>
             </footer>
           </div>
         `;
 
-        document.getElementById("agreeButton").addEventListener("click", () => recordDecision("agree_ai"));
-        document.getElementById("overrideButton").addEventListener("click", () => recordDecision("override_ai"));
+        if (stimulus.trialType === "no_ai_baseline") {
+          document.getElementById("approveButton").addEventListener("click", () => recordDecision("approve_loan"));
+          document.getElementById("rejectButton").addEventListener("click", () => recordDecision("reject_loan"));
+        } else {
+          document.getElementById("agreeButton").addEventListener("click", () => recordDecision("agree_ai"));
+          document.getElementById("overrideButton").addEventListener("click", () => recordDecision("override_ai"));
+        }
         state.trialStartMs = performance.now();
         startTimer();
+      }
+
+      function decisionSupportPanel(stimulus, tone) {
+        if (stimulus.trialType === "no_ai_baseline") {
+          return `
+            <section class="flex min-h-80 items-center justify-center rounded-lg border border-slate-200 bg-white p-6 shadow-sm">
+              <div class="max-w-md text-center">
+                <p class="text-sm font-semibold uppercase tracking-wide text-slate-500">Independent decision</p>
+                <h2 class="mt-2 text-2xl font-extrabold text-slate-950">Assess the application</h2>
+                <p class="mt-3 leading-7 text-slate-700">Choose whether to approve or reject the requested loan.</p>
+              </div>
+            </section>
+          `;
+        }
+
+        const cues = stimulus.trialType === "ai_plus_cues"
+          ? `<div class="mt-6 grid gap-4">${stimulus.cues.map((cue) => cueCard(cue)).join("")}</div>`
+          : "";
+
+        return `
+          <section class="rounded-lg border border-slate-200 bg-white p-6 shadow-sm">
+            <p class="text-sm font-semibold uppercase tracking-wide text-slate-500">AI advice</p>
+            <div class="mt-3 rounded-lg border p-5 ${tone.badge}">
+              <p class="text-sm font-bold uppercase tracking-wide">AI recommendation</p>
+              <p class="mt-2 text-4xl font-extrabold tracking-normal">${escapeHtml(stimulus.applicant.aiRecommendation)}</p>
+            </div>
+            ${cues}
+          </section>
+        `;
+      }
+
+      function decisionButtons(stimulus) {
+        const buttonClasses = "flex-1 rounded-lg border border-slate-300 bg-white px-6 py-5 text-xl font-extrabold text-slate-950 shadow-sm transition hover:bg-slate-50 focus:outline-none focus:ring-4 focus:ring-slate-200";
+
+        if (stimulus.trialType === "no_ai_baseline") {
+          return `
+            <button id="approveButton" type="button" class="${buttonClasses}">Approve loan</button>
+            <button id="rejectButton" type="button" class="${buttonClasses}">Reject loan</button>
+          `;
+        }
+
+        return `
+          <button id="agreeButton" type="button" class="${buttonClasses}">Agree with AI</button>
+          <button id="overrideButton" type="button" class="${buttonClasses}">Override AI</button>
+        `;
       }
 
       function profileRow(label, value) {
@@ -666,13 +495,10 @@
         `;
       }
 
-      function cueCard(cue, cueIndex) {
+      function cueCard(cue) {
         return `
           <article class="rounded-lg border border-slate-200 bg-slate-50 p-5">
-            <div class="mb-3 flex items-center justify-between gap-3">
-              <h3 class="text-base font-extrabold text-slate-950">Cue ${cueIndex}: ${escapeHtml(cue.type)}</h3>
-              <span class="rounded-md border border-slate-200 bg-white px-2 py-1 text-xs font-bold uppercase tracking-wide text-slate-500">Info ${cueIndex}</span>
-            </div>
+            <h3 class="mb-3 text-base font-extrabold text-slate-950">Additional AI information</h3>
             <p class="text-base leading-7 text-slate-800">${escapeHtml(cue.text)}</p>
           </article>
         `;
@@ -723,49 +549,76 @@
         const applicant = stimulus.applicant;
         const condition = conditions[state.conditionKey];
         const reactionTimeMs = Math.max(0, Math.round(performance.now() - state.trialStartMs));
-        const userFinalDecision = userChoice === "timeout"
-          ? ""
-          : userChoice === "agree_ai"
-            ? applicant.aiRecommendation
-            : oppositeDecision(applicant.aiRecommendation);
+        let userFinalDecision = "";
+
+        if (userChoice !== "timeout") {
+          if (stimulus.trialType === "no_ai_baseline") {
+            userFinalDecision = userChoice === "approve_loan" ? "APPROVE" : "REJECT";
+          } else {
+            userFinalDecision = userChoice === "agree_ai"
+              ? applicant.aiRecommendation
+              : oppositeDecision(applicant.aiRecommendation);
+          }
+        }
+
+        const warrantedCue = stimulus.warrantedCue;
+        const unwarrantedCue = stimulus.unwarrantedCue;
+        const cue1 = stimulus.cues[0];
+        const cue2 = stimulus.cues[1];
+        const aiWasShown = stimulus.trialType !== "no_ai_baseline";
 
         state.pendingResponse = {
           participant_id: state.participantId,
           study_id: state.studyId,
           session_id: state.sessionId,
           seed: state.seed,
+          stimulus_set_version: STIMULUS_SET_VERSION,
           condition: condition.csvLabel,
           trial_number: state.currentTrialIndex + 1,
+          presentation_order: state.currentTrialIndex + 1,
           trial_id: stimulus.trialId,
+          trial_type: stimulus.trialType,
+          trial_phase: stimulus.trialPhase,
+          report_prompt_shown: String(stimulus.askRetrospectiveReport),
+          conflict_validation_status: stimulus.conflictValidationStatus,
+          pilot_approve_rate: stimulus.pilotApproveRate,
+          candidate_conflict_score: applicant.candidateConflictScore,
           cue_combination: stimulus.cueCombination,
-          warranted_cue_id: stimulus.warrantedCue.id,
-          warranted_cue_type: stimulus.warrantedCue.type,
-          warranted_cue_text: stimulus.warrantedCue.text,
-          unwarranted_cue_id: stimulus.unwarrantedCue.id,
-          unwarranted_cue_type: stimulus.unwarrantedCue.type,
-          unwarranted_cue_text: stimulus.unwarrantedCue.text,
-          cue_1_id: stimulus.cues[0].id,
-          cue_1_category: stimulus.cues[0].category,
-          cue_1_type: stimulus.cues[0].type,
-          cue_1_text: stimulus.cues[0].text,
-          cue_2_id: stimulus.cues[1].id,
-          cue_2_category: stimulus.cues[1].category,
-          cue_2_type: stimulus.cues[1].type,
-          cue_2_text: stimulus.cues[1].text,
+          warranted_cue_id: warrantedCue?.id ?? "",
+          warranted_cue_type: warrantedCue?.type ?? "",
+          warranted_cue_text: warrantedCue?.text ?? "",
+          warranted_cue_metric: warrantedCue?.metric ?? "",
+          warranted_cue_metric_name: warrantedCue?.metricName ?? "",
+          unwarranted_cue_id: unwarrantedCue?.id ?? "",
+          unwarranted_cue_type: unwarrantedCue?.type ?? "",
+          unwarranted_cue_text: unwarrantedCue?.text ?? "",
+          unwarranted_cue_metric: unwarrantedCue?.metric ?? "",
+          unwarranted_cue_metric_name: unwarrantedCue?.metricName ?? "",
+          cue_1_id: cue1?.id ?? "",
+          cue_1_category: cue1?.category ?? "",
+          cue_1_type: cue1?.type ?? "",
+          cue_1_text: cue1?.text ?? "",
+          cue_1_metric: cue1?.metric ?? "",
+          cue_1_metric_name: cue1?.metricName ?? "",
+          cue_2_id: cue2?.id ?? "",
+          cue_2_category: cue2?.category ?? "",
+          cue_2_type: cue2?.type ?? "",
+          cue_2_text: cue2?.text ?? "",
+          cue_2_metric: cue2?.metric ?? "",
+          cue_2_metric_name: cue2?.metricName ?? "",
           applicant_id: applicant.applicantId,
-          applicant_age: applicant.age,
           annual_income_eur: applicant.income,
           requested_loan_eur: applicant.loanAmount,
+          repayment_term_years: applicant.repaymentTermYears,
           credit_score: applicant.creditScore,
-          employment_years: applicant.employmentYears,
           savings_eur: applicant.savings,
           loan_to_income_pct: applicant.loanToIncome,
           savings_to_loan_pct: applicant.savingsToLoan,
           actual_outcome: applicant.actualOutcome,
-          ai_recommendation: applicant.aiRecommendation,
-          ai_accuracy: applicant.aiIsCorrect ? "correct" : "incorrect",
+          ai_recommendation: aiWasShown ? applicant.aiRecommendation : "",
+          ai_accuracy: aiWasShown ? (applicant.aiIsCorrect ? "correct" : "incorrect") : "",
           user_choice: userChoice,
-          user_agreed_with_ai: userChoice === "timeout" ? "" : String(userChoice === "agree_ai"),
+          user_agreed_with_ai: userChoice === "timeout" || !aiWasShown ? "" : String(userChoice === "agree_ai"),
           user_final_decision: userFinalDecision,
           decision_correct: userChoice === "timeout" ? "" : String(userFinalDecision === applicant.actualOutcome),
           decision_rt_ms: reactionTimeMs,
@@ -774,7 +627,28 @@
           decision_timestamp_iso: new Date().toISOString()
         };
 
-        openReportModal(userChoice, reactionTimeMs, stimulus);
+        if (stimulus.askRetrospectiveReport) {
+          openReportModal(userChoice, reactionTimeMs, stimulus);
+        } else {
+          saveResponseWithoutReport();
+        }
+      }
+
+      function saveResponseWithoutReport() {
+        state.responses.push({
+          ...state.pendingResponse,
+          reported_information: "",
+          reported_cue_ids: "",
+          reported_cue_categories: "",
+          reported_warranted_cue: "",
+          reported_unwarranted_cue: "",
+          reported_ai_recommendation: "",
+          reported_other: "",
+          report_timestamp_iso: "",
+          current_warranted_cue_position: "",
+          current_unwarranted_cue_position: ""
+        });
+        advanceTrial();
       }
 
       function openReportModal(userChoice, reactionTimeMs, stimulus) {
@@ -783,24 +657,14 @@
         reportModalKicker.textContent = userChoice === "timeout" ? "Time elapsed" : "Decision recorded";
 
         const options = [
-          {
-            value: "applicant_data",
-            label: "Applicant data table",
-            meta: "applicant_data"
-          },
-          {
-            value: "cue_1",
-            label: `Cue 1: ${stimulus.cues[0].type}`,
-            meta: `${stimulus.cues[0].category}:${stimulus.cues[0].id}`
-          },
-          {
-            value: "cue_2",
-            label: `Cue 2: ${stimulus.cues[1].type}`,
-            meta: `${stimulus.cues[1].category}:${stimulus.cues[1].id}`
-          },
+          ...stimulus.cues.map((cue) => ({
+            value: `cue_${cue.id}`,
+            label: cue.text,
+            meta: `${cue.category}:${cue.id}`
+          })),
           {
             value: "ai_recommendation",
-            label: "AI recommendation label",
+            label: `AI recommendation: ${stimulus.applicant.aiRecommendation}`,
             meta: "ai_recommendation"
           },
           {
@@ -856,7 +720,6 @@
           reported_cue_categories: reportedCueCategories.join("|"),
           reported_warranted_cue: String(reportedCueCategories.includes("warranted")),
           reported_unwarranted_cue: String(reportedCueCategories.includes("unwarranted")),
-          reported_applicant_data: String(reportedValues.includes("applicant_data")),
           reported_ai_recommendation: String(reportedValues.includes("ai_recommendation")),
           reported_other: String(reportedValues.includes("other")),
           report_timestamp_iso: new Date().toISOString(),
@@ -864,9 +727,13 @@
           current_unwarranted_cue_position: stimulus.cues.findIndex((cue) => cue.category === "unwarranted") + 1
         });
 
+        closeReportModal();
+        advanceTrial();
+      }
+
+      function advanceTrial() {
         state.pendingResponse = null;
         state.currentTrialIndex += 1;
-        closeReportModal();
 
         if (state.currentTrialIndex >= state.trialOrder.length) {
           renderPostSurvey();
@@ -884,7 +751,7 @@
               <div class="mt-6 grid gap-5">
                 ${likertQuestion("post_ai_trust", "I trusted the AI recommendation during the task.", 5)}
                 ${likertQuestion("post_time_pressure", "I felt time pressure while making decisions.", 5)}
-                ${likertQuestion("post_strategy", "I tried to compare the AI cues with the applicant data.", 5)}
+                ${likertQuestion("post_strategy", "I tried to compare the additional AI information with the applicant data.", 5)}
                 ${likertQuestion("post_attention", "Attention check: select option 4 for this item.", 5)}
               </div>
 
@@ -977,30 +844,45 @@
           "study_id",
           "session_id",
           "seed",
+          "stimulus_set_version",
           "condition",
           "trial_number",
+          "presentation_order",
           "trial_id",
+          "trial_type",
+          "trial_phase",
+          "report_prompt_shown",
+          "conflict_validation_status",
+          "pilot_approve_rate",
+          "candidate_conflict_score",
           "cue_combination",
           "warranted_cue_id",
           "warranted_cue_type",
           "warranted_cue_text",
+          "warranted_cue_metric",
+          "warranted_cue_metric_name",
           "unwarranted_cue_id",
           "unwarranted_cue_type",
           "unwarranted_cue_text",
+          "unwarranted_cue_metric",
+          "unwarranted_cue_metric_name",
           "cue_1_id",
           "cue_1_category",
           "cue_1_type",
           "cue_1_text",
+          "cue_1_metric",
+          "cue_1_metric_name",
           "cue_2_id",
           "cue_2_category",
           "cue_2_type",
           "cue_2_text",
+          "cue_2_metric",
+          "cue_2_metric_name",
           "applicant_id",
-          "applicant_age",
           "annual_income_eur",
           "requested_loan_eur",
+          "repayment_term_years",
           "credit_score",
-          "employment_years",
           "savings_eur",
           "loan_to_income_pct",
           "savings_to_loan_pct",
@@ -1020,7 +902,6 @@
           "reported_cue_categories",
           "reported_warranted_cue",
           "reported_unwarranted_cue",
-          "reported_applicant_data",
           "reported_ai_recommendation",
           "reported_other",
           "report_timestamp_iso",
@@ -1052,7 +933,6 @@
       }
 
       submitReportButton.addEventListener("click", submitReport);
-      state.stimulusPool = buildStimulusPool();
       renderWelcome();
     })();
   </script>
