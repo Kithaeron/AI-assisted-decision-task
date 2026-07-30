@@ -1,30 +1,31 @@
 (() => {
   "use strict";
 
-  // EVIDENCE_REQUIRED: These are model-estimated candidate high-conflict profiles, not empirically validated 50/50 cases.
-  // The offline generator is generate_fixed_stimuli.mjs; runtime code does not generate applicant data or cue values.
+  // EVIDENCE_REQUIRED: 54 profiles are model-estimated candidate high-conflict cases, not empirically validated 50/50 cases.
+  // Six profiles are deliberately designed obvious cases with intended directions, not observed banking ground truth.
+  // The v3 fixed manifest supplied the base set; runtime code does not generate applicant data or cue values.
   // EVIDENCE_REQUIRED: actualOutcome is a legacy alias of modelEstimatedClass in this generated source.
   // The experiment runtime and CSV export do not read it or describe it as observed ground truth.
   // aiIsCorrect means synthetic AI/model agreement only; it is not empirical AI accuracy.
-  const STIMULUS_SET_VERSION = "fixed-60-counterbalanced-v3";
+  const STIMULUS_SET_VERSION = "fixed-60-counterbalanced-six-obvious-v4";
   const FIXED_STIMULI = [
   {
     "trialId": "T001",
     "applicant": {
       "applicantId": "A001",
-      "income": 36000,
-      "loanAmount": 17500,
-      "repaymentTermYears": 4,
-      "creditScore": 590,
-      "savings": 6500,
-      "annualRepaymentBurdenPct": 12.2,
-      "loanToIncomePct": 48.6,
-      "savingsToLoanPct": 37.1,
-      "affordabilitySignal": -0.359,
-      "creditSignal": 0.3,
-      "savingsSignal": 0.571,
-      "modelLatentScore": 0.011,
-      "modelEstimatedApprovalPropensity": 0.506,
+      "income": 82000,
+      "loanAmount": 12000,
+      "repaymentTermYears": 3,
+      "creditScore": 820,
+      "savings": 15000,
+      "annualRepaymentBurdenPct": 4.9,
+      "loanToIncomePct": 14.6,
+      "savingsToLoanPct": 125,
+      "affordabilitySignal": 0.854,
+      "creditSignal": 1,
+      "savingsSignal": 1,
+      "modelLatentScore": 0.927,
+      "modelEstimatedApprovalPropensity": 0.865,
       "modelEstimatedClass": "APPROVE",
       "actualOutcome": "APPROVE",
       "aiRecommendation": "APPROVE",
@@ -35,8 +36,8 @@
         "id": "W1",
         "category": "warranted",
         "type": "Feature Explanation",
-        "text": "The AI treated savings equal to 37.1% of the requested loan as evidence supporting APPROVE.",
-        "metric": 37.1,
+        "text": "The AI treated savings equal to 125% of the requested loan as evidence supporting APPROVE.",
+        "metric": 125,
         "metricName": "savings_to_loan_pct"
       },
       "W2": {
@@ -64,6 +65,9 @@
         "metricName": "social_consensus_pct"
       }
     },
+    "stimulusType": "obvious_approve",
+    "isObviousCase": true,
+    "intendedObviousDirection": "APPROVE",
     "conflictValidationStatus": "model_estimated_unvalidated",
     "observedNoAiApproveRate": ""
   },
@@ -661,19 +665,19 @@
     "trialId": "T012",
     "applicant": {
       "applicantId": "A012",
-      "income": 58000,
-      "loanAmount": 23500,
-      "repaymentTermYears": 3,
-      "creditScore": 635,
-      "savings": 10500,
-      "annualRepaymentBurdenPct": 13.5,
-      "loanToIncomePct": 40.5,
-      "savingsToLoanPct": 44.7,
-      "affordabilitySignal": -0.584,
-      "creditSignal": 0.45,
-      "savingsSignal": 0.823,
-      "modelLatentScore": -0.011,
-      "modelEstimatedApprovalPropensity": 0.494,
+      "income": 38000,
+      "loanAmount": 30000,
+      "repaymentTermYears": 2,
+      "creditScore": 260,
+      "savings": 500,
+      "annualRepaymentBurdenPct": 39.5,
+      "loanToIncomePct": 78.9,
+      "savingsToLoanPct": 1.7,
+      "affordabilitySignal": -1,
+      "creditSignal": -0.8,
+      "savingsSignal": -0.611,
+      "modelLatentScore": -0.872,
+      "modelEstimatedApprovalPropensity": 0.149,
       "modelEstimatedClass": "REJECT",
       "actualOutcome": "REJECT",
       "aiRecommendation": "REJECT",
@@ -684,8 +688,8 @@
         "id": "W1",
         "category": "warranted",
         "type": "Feature Explanation",
-        "text": "The AI treated the estimated annual principal repayment burden of 13.5% of income as evidence supporting REJECT.",
-        "metric": 13.5,
+        "text": "The AI treated the estimated annual principal repayment burden of 39.5% of income as evidence supporting REJECT.",
+        "metric": 39.5,
         "metricName": "annual_repayment_burden_pct"
       },
       "W2": {
@@ -713,6 +717,9 @@
         "metricName": "social_consensus_pct"
       }
     },
+    "stimulusType": "obvious_reject",
+    "isObviousCase": true,
+    "intendedObviousDirection": "REJECT",
     "conflictValidationStatus": "model_estimated_unvalidated",
     "observedNoAiApproveRate": ""
   },
@@ -1192,19 +1199,19 @@
     "trialId": "T021",
     "applicant": {
       "applicantId": "A021",
-      "income": 86000,
-      "loanAmount": 38000,
+      "income": 90000,
+      "loanAmount": 15000,
       "repaymentTermYears": 4,
-      "creditScore": 570,
-      "savings": 11000,
-      "annualRepaymentBurdenPct": 11,
-      "loanToIncomePct": 44.2,
-      "savingsToLoanPct": 28.9,
-      "affordabilitySignal": -0.174,
-      "creditSignal": 0.233,
-      "savingsSignal": 0.298,
-      "modelLatentScore": 0.039,
-      "modelEstimatedApprovalPropensity": 0.52,
+      "creditScore": 790,
+      "savings": 18000,
+      "annualRepaymentBurdenPct": 4.2,
+      "loanToIncomePct": 16.7,
+      "savingsToLoanPct": 120,
+      "affordabilitySignal": 0.972,
+      "creditSignal": 0.967,
+      "savingsSignal": 1,
+      "modelLatentScore": 0.974,
+      "modelEstimatedApprovalPropensity": 0.875,
       "modelEstimatedClass": "APPROVE",
       "actualOutcome": "APPROVE",
       "aiRecommendation": "APPROVE",
@@ -1215,8 +1222,8 @@
         "id": "W1",
         "category": "warranted",
         "type": "Feature Explanation",
-        "text": "The AI treated savings equal to 28.9% of the requested loan as evidence supporting APPROVE.",
-        "metric": 28.9,
+        "text": "The AI treated savings equal to 120% of the requested loan as evidence supporting APPROVE.",
+        "metric": 120,
         "metricName": "savings_to_loan_pct"
       },
       "W2": {
@@ -1244,6 +1251,9 @@
         "metricName": "social_consensus_pct"
       }
     },
+    "stimulusType": "obvious_approve",
+    "isObviousCase": true,
+    "intendedObviousDirection": "APPROVE",
     "conflictValidationStatus": "model_estimated_unvalidated",
     "observedNoAiApproveRate": ""
   },
@@ -1841,19 +1851,19 @@
     "trialId": "T032",
     "applicant": {
       "applicantId": "A032",
-      "income": 43000,
-      "loanAmount": 18500,
-      "repaymentTermYears": 4,
-      "creditScore": 595,
+      "income": 42000,
+      "loanAmount": 32000,
+      "repaymentTermYears": 2,
+      "creditScore": 280,
       "savings": 1000,
-      "annualRepaymentBurdenPct": 10.8,
-      "loanToIncomePct": 43,
-      "savingsToLoanPct": 5.4,
-      "affordabilitySignal": -0.126,
-      "creditSignal": 0.317,
-      "savingsSignal": -0.486,
-      "modelLatentScore": -0.025,
-      "modelEstimatedApprovalPropensity": 0.487,
+      "annualRepaymentBurdenPct": 38.1,
+      "loanToIncomePct": 76.2,
+      "savingsToLoanPct": 3.1,
+      "affordabilitySignal": -1,
+      "creditSignal": -0.733,
+      "savingsSignal": -0.563,
+      "modelLatentScore": -0.841,
+      "modelEstimatedApprovalPropensity": 0.157,
       "modelEstimatedClass": "REJECT",
       "actualOutcome": "REJECT",
       "aiRecommendation": "REJECT",
@@ -1864,8 +1874,8 @@
         "id": "W1",
         "category": "warranted",
         "type": "Feature Explanation",
-        "text": "The AI treated savings equal to 5.4% of the requested loan as evidence supporting REJECT.",
-        "metric": 5.4,
+        "text": "The AI treated savings equal to 3.1% of the requested loan as evidence supporting REJECT.",
+        "metric": 3.1,
         "metricName": "savings_to_loan_pct"
       },
       "W2": {
@@ -1893,6 +1903,9 @@
         "metricName": "social_consensus_pct"
       }
     },
+    "stimulusType": "obvious_reject",
+    "isObviousCase": true,
+    "intendedObviousDirection": "REJECT",
     "conflictValidationStatus": "model_estimated_unvalidated",
     "observedNoAiApproveRate": ""
   },
@@ -2372,19 +2385,19 @@
     "trialId": "T041",
     "applicant": {
       "applicantId": "A041",
-      "income": 68000,
-      "loanAmount": 14000,
-      "repaymentTermYears": 2,
-      "creditScore": 435,
-      "savings": 6000,
-      "annualRepaymentBurdenPct": 10.3,
-      "loanToIncomePct": 20.6,
-      "savingsToLoanPct": 42.9,
-      "affordabilitySignal": -0.049,
-      "creditSignal": -0.217,
-      "savingsSignal": 0.762,
-      "modelLatentScore": 0.014,
-      "modelEstimatedApprovalPropensity": 0.507,
+      "income": 74000,
+      "loanAmount": 9000,
+      "repaymentTermYears": 3,
+      "creditScore": 760,
+      "savings": 14000,
+      "annualRepaymentBurdenPct": 4.1,
+      "loanToIncomePct": 12.2,
+      "savingsToLoanPct": 155.6,
+      "affordabilitySignal": 0.991,
+      "creditSignal": 0.867,
+      "savingsSignal": 1,
+      "modelLatentScore": 0.949,
+      "modelEstimatedApprovalPropensity": 0.87,
       "modelEstimatedClass": "APPROVE",
       "actualOutcome": "APPROVE",
       "aiRecommendation": "APPROVE",
@@ -2395,8 +2408,8 @@
         "id": "W1",
         "category": "warranted",
         "type": "Feature Explanation",
-        "text": "The AI treated savings equal to 42.9% of the requested loan as evidence supporting APPROVE.",
-        "metric": 42.9,
+        "text": "The AI treated savings equal to 155.6% of the requested loan as evidence supporting APPROVE.",
+        "metric": 155.6,
         "metricName": "savings_to_loan_pct"
       },
       "W2": {
@@ -2424,6 +2437,9 @@
         "metricName": "social_consensus_pct"
       }
     },
+    "stimulusType": "obvious_approve",
+    "isObviousCase": true,
+    "intendedObviousDirection": "APPROVE",
     "conflictValidationStatus": "model_estimated_unvalidated",
     "observedNoAiApproveRate": ""
   },
@@ -3021,19 +3037,19 @@
     "trialId": "T052",
     "applicant": {
       "applicantId": "A052",
-      "income": 65000,
-      "loanAmount": 34000,
-      "repaymentTermYears": 4,
-      "creditScore": 635,
-      "savings": 12500,
-      "annualRepaymentBurdenPct": 13.1,
-      "loanToIncomePct": 52.3,
-      "savingsToLoanPct": 36.8,
-      "affordabilitySignal": -0.513,
-      "creditSignal": 0.45,
-      "savingsSignal": 0.559,
-      "modelLatentScore": -0.015,
-      "modelEstimatedApprovalPropensity": 0.492,
+      "income": 45000,
+      "loanAmount": 35000,
+      "repaymentTermYears": 2,
+      "creditScore": 300,
+      "savings": 1000,
+      "annualRepaymentBurdenPct": 38.9,
+      "loanToIncomePct": 77.8,
+      "savingsToLoanPct": 2.9,
+      "affordabilitySignal": -1,
+      "creditSignal": -0.667,
+      "savingsSignal": -0.571,
+      "modelLatentScore": -0.819,
+      "modelEstimatedApprovalPropensity": 0.163,
       "modelEstimatedClass": "REJECT",
       "actualOutcome": "REJECT",
       "aiRecommendation": "REJECT",
@@ -3044,8 +3060,8 @@
         "id": "W1",
         "category": "warranted",
         "type": "Feature Explanation",
-        "text": "The AI treated the estimated annual principal repayment burden of 13.1% of income as evidence supporting REJECT.",
-        "metric": 13.1,
+        "text": "The AI treated the estimated annual principal repayment burden of 38.9% of income as evidence supporting REJECT.",
+        "metric": 38.9,
         "metricName": "annual_repayment_burden_pct"
       },
       "W2": {
@@ -3073,6 +3089,9 @@
         "metricName": "social_consensus_pct"
       }
     },
+    "stimulusType": "obvious_reject",
+    "isObviousCase": true,
+    "intendedObviousDirection": "REJECT",
     "conflictValidationStatus": "model_estimated_unvalidated",
     "observedNoAiApproveRate": ""
   },
