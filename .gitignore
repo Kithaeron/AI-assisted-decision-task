@@ -1,4 +1,13 @@
 *.csv
+.env
+.env.*
+!.env.example
+backend_config.local.js
+supabase/.branches/
+supabase/.temp/
+supabase/.env
+supabase/functions/.env
+supabase/functions/.env.*
 .git-codex/
 .agents/
 .codex/

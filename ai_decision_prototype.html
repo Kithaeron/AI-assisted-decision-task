@@ -103,6 +103,7 @@
   ></div>
 
   <script src="./fixed_stimuli.js"></script>
+  <script src="./experiment_backend_client.js"></script>
   <script src="./experiment_persistence.js"></script>
   <script>
     (() => {
@@ -116,13 +117,20 @@
         throw new Error("The fixed 60-trial stimulus manifest failed to load.");
       }
       const TOTAL_SESSION_TRIALS = FIXED_STIMULI.length;
-      const PROLIFIC_COMPLETION_URL = "https://app.prolific.com/submissions/complete?cc=PUT_COMPLETION_CODE_HERE";
       const REPORT_SCHEMA_VERSION = "v2_no_ai_recommendation_option";
+      const TIMING_POLICY_VERSION = "pressure_v2_first10_30s_then50_15s";
+      const API_CONTRACT_VERSION = window.EXPERIMENT_API_CONTRACT_VERSION || "v1";
+      const CLIENT_BUILD_VERSION = "supabase-backend-v1";
       const TRANSITION_HALF_MS = 250;
       const BACKEND_CONFIG = window.EXPERIMENT_BACKEND_CONFIG || {
         mode: "local_only",
-        endpoint: ""
+        apiBaseUrl: "",
+        studyKey: "ai_assisted_loan_decision",
+        consentVersion: "EVIDENCE_REQUIRED",
+        consentGateSatisfied: false,
+        allowUnapprovedConsentForSynthetic: false
       };
+      const backendClient = window.createExperimentBackendClient(BACKEND_CONFIG);
       const COUNTERBALANCE_CONDITIONS = [
         { key: "no_ai", trialType: "no_ai_baseline", trialPhase: "phase_1_no_ai", cueIds: [] },
         { key: "ai_only", trialType: "ai_only_baseline", trialPhase: "phase_2_ai_only", cueIds: [] },
@@ -136,7 +144,7 @@
         pressure: {
           key: "pressure",
           label: "Time pressure",
-          csvLabel: "10_seconds"
+          csvLabel: "15_seconds"
         },
         no_pressure: {
           key: "no_pressure",
@@ -146,23 +154,25 @@
       };
 
       const params = new URLSearchParams(window.location.search);
-      const prolificParticipantId = params.get("PROLIFIC_PID");
+      const prolificParticipantId = params.get("PROLIFIC_PID") || "";
       const isProlificSession = Boolean(prolificParticipantId);
-      const studyId = params.get("STUDY_ID") || "";
-      const sessionParam = params.get("SESSION_ID") || "";
+      const prolificStudyId = params.get("STUDY_ID") || "";
+      const prolificSessionId = params.get("SESSION_ID") || "";
       const developmentIdentity = isProlificSession ? null : getOrCreateDevelopmentIdentity();
-      const participantId = prolificParticipantId || developmentIdentity.participantId;
-      const sessionId = sessionParam || (
+      const localParticipantId = prolificParticipantId || developmentIdentity.participantId;
+      const localSessionId = prolificSessionId || (
         isProlificSession
-          ? getOrCreateProlificSessionId(participantId, studyId)
+          ? getOrCreateProlificSessionId(prolificParticipantId, prolificStudyId)
           : developmentIdentity.sessionId
       );
-      const seedParam = params.get("seed") || participantId;
+      const clientInstanceId = getOrCreateClientInstanceId();
+      const backendRequired = backendClient.mode === "backend_required";
+      const seedParam = params.get("seed") || (backendRequired ? clientInstanceId : localParticipantId);
       const trialCount = TOTAL_SESSION_TRIALS;
       const initialConditionKey = normalizeCondition(params.get("condition") || params.get("time_pressure"));
       const counterbalance = resolveCounterbalanceList(
         params.get("counterbalance_list") || params.get("list"),
-        participantId
+        backendRequired ? clientInstanceId : localParticipantId
       );
 
       const app = document.getElementById("app");
@@ -177,9 +187,16 @@
       const trialTransition = document.getElementById("trialTransition");
 
       const state = {
-        participantId,
-        studyId,
-        sessionId,
+        clientInstanceId,
+        participantId: backendRequired ? "" : localParticipantId,
+        studyId: backendRequired ? String(BACKEND_CONFIG.studyKey || "ai_assisted_loan_decision") : prolificStudyId,
+        sessionId: backendRequired ? "" : localSessionId,
+        experimentSessionId: "",
+        sessionWriteToken: "",
+        backendSessionStarted: false,
+        backendSessionResumed: false,
+        backendCompletion: null,
+        backendCompletionError: "",
         seed: seedParam,
         conditionKey: initialConditionKey,
         counterbalanceList: counterbalance.list,
@@ -202,10 +219,16 @@
       };
 
       const persistence = window.createExperimentPersistence({
-        storageKey: `ai-loan-experiment:v4:${sessionId}`,
-        sessionId,
-        backendConfig: BACKEND_CONFIG,
-        getSessionSnapshot: serializeSessionState
+        storageKey: backendRequired
+          ? `ai-loan-experiment:v5:${clientInstanceId}`
+          : `ai-loan-experiment:v4:${localSessionId}`,
+        backendClient,
+        getBackendSession: () => ({
+          experimentSessionId: state.experimentSessionId,
+          sessionWriteToken: state.sessionWriteToken
+        }),
+        getSessionSnapshot: serializeSessionState,
+        retryConfig: BACKEND_CONFIG.retry
       });
       const restoredSession = persistence.restore();
 
@@ -256,6 +279,17 @@
         return identity;
       }
 
+      function getOrCreateClientInstanceId() {
+        const key = "ai-loan-experiment:active-client-instance:v1";
+        const existing = readIdentity(key);
+        if (existing?.clientInstanceId) {
+          return existing.clientInstanceId;
+        }
+        const identity = { clientInstanceId: createUuid() };
+        writeIdentity(key, identity);
+        return identity.clientInstanceId;
+      }
+
       function getOrCreateProlificSessionId(stableParticipantId, stableStudyId) {
         const key = `ai-loan-experiment:prolific-session:${stableParticipantId}:${stableStudyId}`;
         const existing = readIdentity(key);
@@ -271,9 +305,19 @@
       function serializeSessionState() {
         return {
           stimulusSetVersion: STIMULUS_SET_VERSION,
+          timingPolicyVersion: TIMING_POLICY_VERSION,
+          apiContractVersion: API_CONTRACT_VERSION,
+          clientBuildVersion: CLIENT_BUILD_VERSION,
+          clientInstanceId: state.clientInstanceId,
           participantId: state.participantId,
           studyId: state.studyId,
           sessionId: state.sessionId,
+          experimentSessionId: state.experimentSessionId,
+          sessionWriteToken: state.sessionWriteToken,
+          backendSessionStarted: state.backendSessionStarted,
+          backendSessionResumed: state.backendSessionResumed,
+          backendCompletion: state.backendCompletion,
+          backendCompletionError: state.backendCompletionError,
           seed: state.seed,
           conditionKey: state.conditionKey,
           counterbalanceList: state.counterbalanceList,
@@ -295,12 +339,28 @@
         if (
           !saved
           || saved.stimulusSetVersion !== STIMULUS_SET_VERSION
-          || saved.participantId !== state.participantId
-          || saved.sessionId !== state.sessionId
+          || (saved.timingPolicyVersion && saved.timingPolicyVersion !== TIMING_POLICY_VERSION)
+          || (saved.clientInstanceId && saved.clientInstanceId !== state.clientInstanceId)
         ) {
           return false;
         }
 
+        if (!backendRequired && (
+          saved.participantId !== state.participantId
+          || saved.sessionId !== state.sessionId
+        )) {
+          return false;
+        }
+
+        state.participantId = saved.participantId || state.participantId;
+        state.studyId = saved.studyId || state.studyId;
+        state.sessionId = saved.sessionId || state.sessionId;
+        state.experimentSessionId = saved.experimentSessionId || "";
+        state.sessionWriteToken = saved.sessionWriteToken || "";
+        state.backendSessionStarted = Boolean(saved.backendSessionStarted);
+        state.backendSessionResumed = Boolean(saved.backendSessionResumed);
+        state.backendCompletion = saved.backendCompletion || null;
+        state.backendCompletionError = saved.backendCompletionError || "";
         state.seed = saved.seed;
         state.conditionKey = saved.conditionKey;
         state.counterbalanceList = saved.counterbalanceList;
@@ -344,12 +404,21 @@
       }
 
       function queueQuestionnaire(stage, responses) {
-        persistence.queueUpsert(questionnaireIdempotencyKey(stage), {
+        if (backendRequired && !state.backendSessionStarted) {
+          checkpoint("questionnaire_waiting_for_backend_session");
+          return;
+        }
+        persistence.queueUpsert(questionnaireIdempotencyKey(stage), "questionnaire", {
           record_type: "questionnaire",
           questionnaire_stage: stage,
           participant_id: state.participantId,
           study_id: state.studyId,
           session_id: state.sessionId,
+          stimulus_set_version: STIMULUS_SET_VERSION,
+          timing_policy_version: TIMING_POLICY_VERSION,
+          report_schema_version: REPORT_SCHEMA_VERSION,
+          api_contract_version: API_CONTRACT_VERSION,
+          client_build_version: CLIENT_BUILD_VERSION,
           condition: conditions[state.conditionKey].csvLabel,
           counterbalance_list: state.counterbalanceList,
           responses,
@@ -369,7 +438,107 @@
 
         state.pendingResponse = response.report_completed === "true" ? null : response;
         checkpoint(reason);
-        persistence.queueUpsert(response.backend_idempotency_key, response);
+        persistence.queueUpsert(response.backend_idempotency_key, "trial", response);
+      }
+
+      function consentContext() {
+        const external = window.EXPERIMENT_CONSENT_CONTEXT;
+        if (external && typeof external === "object") {
+          return {
+            granted: external.granted === true,
+            version: String(external.version || "")
+          };
+        }
+        return {
+          granted: BACKEND_CONFIG.consentGateSatisfied === true,
+          version: String(BACKEND_CONFIG.consentVersion || "")
+        };
+      }
+
+      function backendStartIdentity() {
+        if (isProlificSession) {
+          if (!prolificStudyId || !prolificSessionId) {
+            throw new Error("The Prolific STUDY_ID and SESSION_ID parameters are required.");
+          }
+          return {
+            prolificPid: prolificParticipantId,
+            prolificStudyId,
+            prolificSessionId
+          };
+        }
+        return {
+          prolificPid: `synthetic-${state.clientInstanceId}`,
+          prolificStudyId: "synthetic-development-study",
+          prolificSessionId: `synthetic-session-${state.clientInstanceId}`
+        };
+      }
+
+      async function ensureBackendSession(options = {}) {
+        if (!backendRequired) {
+          return;
+        }
+        if (state.backendSessionStarted && state.sessionWriteToken && options.reconcile !== true) {
+          return;
+        }
+        const consent = consentContext();
+        const syntheticConsentAllowed = !isProlificSession
+          && BACKEND_CONFIG.allowUnapprovedConsentForSynthetic === true;
+        if (
+          !consent.granted
+          || !consent.version
+          || (consent.version === "EVIDENCE_REQUIRED" && !syntheticConsentAllowed)
+        ) {
+          throw new Error("An approved consent gate and consent version must be configured before backend collection.");
+        }
+
+        const identity = backendStartIdentity();
+        const result = await backendClient.startSession({
+          study_key: String(BACKEND_CONFIG.studyKey || "ai_assisted_loan_decision"),
+          prolific_pid: identity.prolificPid,
+          prolific_study_id: identity.prolificStudyId,
+          prolific_session_id: identity.prolificSessionId,
+          client_instance_id: state.clientInstanceId,
+          stimulus_set_version: STIMULUS_SET_VERSION,
+          timing_policy_version: TIMING_POLICY_VERSION,
+          consent_version: consent.version,
+          client_build_version: CLIENT_BUILD_VERSION
+        });
+
+        if (
+          result.stimulus_set_version !== STIMULUS_SET_VERSION
+          || result.timing_policy_version !== TIMING_POLICY_VERSION
+          || !conditions[result.assignment?.condition_key]
+          || !Number.isInteger(Number(result.assignment?.counterbalance_list))
+          || Number(result.assignment.counterbalance_list) < 1
+          || Number(result.assignment.counterbalance_list) > 6
+        ) {
+          throw new Error("The backend returned an invalid experiment assignment.");
+        }
+        if (
+          state.experimentSessionId
+          && state.experimentSessionId !== result.experiment_session_id
+        ) {
+          throw new Error("The restored session does not match the server session.");
+        }
+        if (
+          state.backendSessionStarted
+          && (state.conditionKey !== result.assignment.condition_key
+            || Number(state.counterbalanceList) !== Number(result.assignment.counterbalance_list))
+        ) {
+          throw new Error("The restored assignment does not match the server assignment.");
+        }
+
+        state.experimentSessionId = result.experiment_session_id;
+        state.sessionWriteToken = result.session_write_token;
+        state.backendSessionStarted = true;
+        state.backendSessionResumed = Boolean(result.resumed);
+        state.participantId = result.experiment_session_id;
+        state.sessionId = result.experiment_session_id;
+        state.studyId = String(BACKEND_CONFIG.studyKey || "ai_assisted_loan_decision");
+        state.conditionKey = result.assignment.condition_key;
+        state.counterbalanceList = Number(result.assignment.counterbalance_list);
+        state.counterbalanceListSource = "server_atomic_allocation";
+        checkpoint("backend_session_reconciled");
       }
 
       function normalizeCondition(value) {
@@ -532,7 +701,7 @@
                   </p>
                 </div>
                 <div class="rounded-lg border border-slate-200 bg-slate-50 px-4 py-3 text-sm font-semibold text-slate-700">
-                  <div>Participant: <span class="tabular-nums">${escapeHtml(participantId)}</span></div>
+                  <div>Participant: <span class="tabular-nums">${escapeHtml(state.participantId || "Secure session pending")}</span></div>
                   <div class="mt-1">Trials this session: <span class="tabular-nums">${trialCount}</span></div>
                   <div class="mt-1">Structure: <span class="tabular-nums">10 no-AI, 10 AI-only, 40 with additional information</span></div>
                 </div>
@@ -567,7 +736,7 @@
           </section>
         `;
 
-        if (!isProlificSession) {
+        if (!isProlificSession && !backendRequired) {
           document.querySelectorAll("[data-condition]").forEach((button) => {
             button.addEventListener("click", () => {
               state.conditionKey = button.dataset.condition;
@@ -604,7 +773,7 @@
       }
 
       function conditionControls() {
-        if (isProlificSession) {
+        if (isProlificSession || backendRequired) {
           return `
             <div class="mt-4 rounded-lg border border-slate-200 bg-white px-4 py-3 text-sm font-bold text-slate-800">
               Assigned condition: ${escapeHtml(conditions[state.conditionKey].label)}
@@ -661,6 +830,18 @@
           return;
         }
 
+        const startButton = document.getElementById("startButton");
+        startButton.disabled = true;
+        try {
+          await ensureBackendSession();
+        } catch (error) {
+          const welcomeError = document.getElementById("welcomeError");
+          welcomeError.textContent = `The secure data session could not start: ${error.message}`;
+          welcomeError.classList.remove("hidden");
+          startButton.disabled = false;
+          return;
+        }
+
         state.preSurvey = {
           ...survey.values,
           pre_attention_passed: survey.values.pre_attention === "3"
@@ -707,6 +888,12 @@
       }
 
       async function resumeExperiment() {
+        try {
+          await ensureBackendSession();
+        } catch (error) {
+          renderBackendUnavailable(error.message);
+          return;
+        }
         if (state.currentTrialIndex >= state.trialOrder.length) {
           renderPostSurvey();
           return;
@@ -1015,11 +1202,16 @@
         const backendIdempotencyKey = trialIdempotencyKey(stimulus.trialId);
 
         state.pendingResponse = {
+          record_type: "trial",
           participant_id: state.participantId,
           study_id: state.studyId,
           session_id: state.sessionId,
+          experiment_session_id: state.experimentSessionId,
           seed: state.seed,
           stimulus_set_version: STIMULUS_SET_VERSION,
+          timing_policy_version: TIMING_POLICY_VERSION,
+          api_contract_version: API_CONTRACT_VERSION,
+          client_build_version: CLIENT_BUILD_VERSION,
           condition: condition.csvLabel,
           counterbalance_list: state.counterbalanceList,
           counterbalance_list_source: state.counterbalanceListSource,
@@ -1301,17 +1493,22 @@
         downloadCsv();
         await persistence.flushRetryQueue({ force: true });
         renderComplete();
-        monitorBackendCompletion();
+        await monitorBackendCompletion();
       }
 
       function renderComplete() {
         const localOnly = persistence.mode === "local_only";
         const pending = persistence.pendingCount();
+        const serverConfirmed = Boolean(state.backendCompletion?.completed);
         const statusMessage = localOnly
           ? "Your data is checkpointed in this browser and the CSV backup has downloaded. No approved backend endpoint is configured, so server saving and automatic Prolific redirection are disabled."
+          : serverConfirmed
+            ? "The server confirmed that the complete session was saved."
+            : state.backendCompletionError
+              ? `Server confirmation is still pending: ${state.backendCompletionError}`
           : pending > 0
             ? `The CSV backup has downloaded. Waiting for ${pending} backend record${pending === 1 ? "" : "s"} to be acknowledged before completion.`
-            : "All configured backend records have been acknowledged. The CSV backup has downloaded.";
+            : "All records were acknowledged. Requesting final completeness confirmation from the server.";
         app.innerHTML = `
           <section class="flex min-h-screen items-center justify-center px-6 py-12">
             <div class="w-full max-w-3xl rounded-lg border border-slate-200 bg-white p-8 text-center shadow-sm">
@@ -1324,9 +1521,9 @@
                 <button id="downloadAgainButton" type="button" class="rounded-lg bg-slate-950 px-5 py-3 text-sm font-extrabold text-white shadow-sm transition hover:bg-slate-800 focus:outline-none focus:ring-4 focus:ring-slate-300">
                   Download CSV Again
                 </button>
-                ${!localOnly && pending > 0 ? `
+                ${!localOnly && !serverConfirmed ? `
                   <button id="retryBackendButton" type="button" class="rounded-lg border border-slate-300 bg-white px-5 py-3 text-sm font-extrabold text-slate-800 transition hover:bg-slate-50 focus:outline-none focus:ring-4 focus:ring-slate-200">
-                    Retry Saving
+                    Retry Server Confirmation
                   </button>
                 ` : ""}
               </div>
@@ -1339,39 +1536,73 @@
         if (retryButton) {
           retryButton.addEventListener("click", async () => {
             retryButton.disabled = true;
+            state.backendCompletionError = "";
+            requeueCompletedData();
             await persistence.flushRetryQueue({ force: true });
             renderComplete();
-            monitorBackendCompletion();
+            await monitorBackendCompletion();
           });
         }
       }
 
-      function monitorBackendCompletion() {
+      function requeueCompletedData() {
+        if (!backendRequired || !state.backendSessionStarted) {
+          return;
+        }
+        if (state.preSurveyCompleted && state.preSurvey) {
+          queueQuestionnaire("pre", state.preSurvey);
+        }
+        if (state.postSurveyCompleted && state.postSurvey) {
+          queueQuestionnaire("post", state.postSurvey);
+        }
+        state.responses.forEach((response) => {
+          persistence.queueUpsert(response.backend_idempotency_key, "trial", response);
+        });
+      }
+
+      async function monitorBackendCompletion() {
         if (!persistence.endpointConfigured) {
           return;
         }
-        if (persistence.allAcknowledged()) {
-          const status = document.getElementById("backendCompletionStatus");
-          if (status) {
-            status.textContent = "All configured backend records have been acknowledged. Completion is ready.";
-          }
-          if (isCompletionUrlConfigured()) {
-            window.setTimeout(() => {
-              window.location.href = PROLIFIC_COMPLETION_URL;
-            }, 800);
+        if (state.backendCompletion?.completed) {
+          const completionUrl = String(state.backendCompletion.completionUrl || "");
+          if (completionUrl.startsWith("https://app.prolific.com/submissions/complete")) {
+            window.setTimeout(() => window.location.assign(completionUrl), 800);
           }
           return;
         }
 
-        window.setTimeout(async () => {
-          await persistence.flushRetryQueue();
+        await persistence.flushRetryQueue({ force: true });
+        if (!persistence.allAcknowledged()) {
+          state.backendCompletionError = `${persistence.pendingCount()} record(s) still await acknowledgement.`;
           renderComplete();
-          monitorBackendCompletion();
-        }, 1000);
-      }
+          return;
+        }
 
-      function isCompletionUrlConfigured() {
-        return !PROLIFIC_COMPLETION_URL.includes("PUT_COMPLETION_CODE_HERE");
+        try {
+          const result = await backendClient.completeSession({
+            experiment_session_id: state.experimentSessionId,
+            session_write_token: state.sessionWriteToken
+          });
+          if (result.completed !== true || !String(result.completion_url || "").startsWith("https://app.prolific.com/submissions/complete")) {
+            throw new Error("The server did not return a valid completion confirmation.");
+          }
+          state.backendCompletion = {
+            completed: true,
+            completedAt: result.completed_at,
+            completionUrl: result.completion_url
+          };
+          state.backendCompletionError = "";
+          checkpoint("server_completion_confirmed");
+          renderComplete();
+          window.setTimeout(() => {
+            window.location.assign(result.completion_url);
+          }, 800);
+        } catch (error) {
+          state.backendCompletionError = String(error?.message || "Server completeness confirmation failed.");
+          checkpoint("server_completion_pending");
+          renderComplete();
+        }
       }
 
       function csvValue(value) {
@@ -1400,8 +1631,12 @@
           "participant_id",
           "study_id",
           "session_id",
+          "experiment_session_id",
           "seed",
           "stimulus_set_version",
+          "timing_policy_version",
+          "api_contract_version",
+          "client_build_version",
           "condition",
           "counterbalance_list",
           "counterbalance_list_source",
@@ -1476,6 +1711,7 @@
           "decision_rt_seconds",
           "timed_out",
           "decision_timestamp_iso",
+          "report_completed",
           "reported_information",
           "reported_cue_ids",
           "reported_cue_categories",
@@ -1508,7 +1744,8 @@
         const timestamp = new Date().toISOString().replace(/[:.]/g, "-");
 
         link.href = url;
-        link.download = `ai-loan-decision-${participantId}-${timestamp}.csv`;
+        const exportIdentity = state.sessionId || state.clientInstanceId;
+        link.download = `ai-loan-decision-${exportIdentity}-${timestamp}.csv`;
         document.body.appendChild(link);
         link.click();
         link.remove();
@@ -1520,8 +1757,41 @@
         persistence.sendBeacon();
       }
 
-      function initializeExperiment() {
+      function renderBackendUnavailable(message) {
+        app.innerHTML = `
+          <section class="flex min-h-screen items-center justify-center px-6 py-12">
+            <div class="w-full max-w-2xl rounded-lg border border-red-200 bg-white p-8 shadow-sm">
+              <p class="text-sm font-semibold uppercase tracking-wide text-red-700">Secure session unavailable</p>
+              <h1 class="mt-2 text-2xl font-extrabold text-slate-950">The experiment has not started</h1>
+              <p class="mt-5 leading-7 text-slate-700">${escapeHtml(message)}</p>
+              <p class="mt-3 text-sm font-semibold text-slate-600">No formal trial or questionnaire record has been sent.</p>
+              <div class="mt-7 flex justify-end">
+                <button id="retrySessionButton" type="button" class="rounded-lg bg-slate-950 px-5 py-3 text-sm font-extrabold text-white shadow-sm transition hover:bg-slate-800 focus:outline-none focus:ring-4 focus:ring-slate-300">
+                  Retry Secure Session
+                </button>
+              </div>
+            </div>
+          </section>
+        `;
+        document.getElementById("retrySessionButton").addEventListener("click", initializeExperiment);
+      }
+
+      async function initializeExperiment() {
         const restored = restoreSessionState(restoredSession);
+        if (backendRequired) {
+          app.innerHTML = `
+            <section class="flex min-h-screen items-center justify-center px-6 py-12">
+              <p class="text-base font-bold text-slate-700">Preparing secure experiment session...</p>
+            </section>
+          `;
+          try {
+            await ensureBackendSession({ reconcile: true });
+          } catch (error) {
+            renderBackendUnavailable(String(error?.message || "The backend session could not be prepared."));
+            return;
+          }
+        }
+
         if (!restored) {
           checkpoint("session_initialized");
           renderWelcome();
@@ -1531,7 +1801,7 @@
         if (state.currentTrialIndex >= state.trialOrder.length) {
           if (state.postSurveyCompleted) {
             renderComplete();
-            monitorBackendCompletion();
+            await monitorBackendCompletion();
           } else {
             renderPostSurvey();
           }
@@ -1548,7 +1818,9 @@
         }
       });
       submitReportButton.addEventListener("click", submitReport);
-      initializeExperiment();
+      initializeExperiment().catch((error) => {
+        renderBackendUnavailable(String(error?.message || "The experiment could not be initialized."));
+      });
     })();
   </script>
 </body>

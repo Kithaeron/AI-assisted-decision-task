@@ -1,0 +1,6 @@
+project_id = "ai-assisted-decision-task-local"
+
+[functions.experiment-api]
+# Browser requests are authenticated by the unguessable per-session write token.
+# The function still uses a server-side Supabase secret key for database access.
+verify_jwt = false
