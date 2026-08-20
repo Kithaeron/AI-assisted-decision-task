@@ -1,6 +1,6 @@
 # Experiment backend contract
 
-Status: implemented and tested; deployment still requires an approved endpoint and consent configuration.
+Status: implemented locally on `feat/supabase-backend`; not deployed.
 
 ## Boundary
 
@@ -58,7 +58,7 @@ Success marks the session completed exactly once and returns the server-configur
 
 ## Offline behavior
 
-Every response is checkpointed in localStorage first. Failed HTTP writes remain in the exponential-backoff queue. The hidden checkpoint retains the internal session UUID/token, exact trial order, current position, responses, and queue. A participant who refreshes an incomplete session sees an interruption message and must ask the researcher for assistance; the UI does not silently resume. CSV remains a backup, not proof of server completeness.
+Every response is checkpointed in localStorage first. Failed HTTP writes remain in the existing exponential-backoff queue. Refresh restores the internal session UUID/token, exact trial order, current position, responses, and queue. CSV remains a backup, not proof of server completeness.
 
 ## Provider replacement
 

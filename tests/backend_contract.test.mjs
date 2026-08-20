@@ -132,9 +132,8 @@ function questionnaireEnvelope(session, stage, responses = {}) {
 
 test("frozen versions and pressure label are stable", () => {
   assert.equal(API_CONTRACT_VERSION, "v1");
-  assert.equal(STIMULUS_SET_VERSION, "synthetic-loan-policy-no-error-v1-manifest-v1");
-  assert.equal(TIMING_POLICY_VERSION, "pressure_v3_first10_30s_then50_15s_overtime_completion");
-  assert.equal(conditionLabel("pressure"), "pressure_30s_no_ai_15s_ai");
+  assert.equal(TIMING_POLICY_VERSION, "pressure_v2_first10_30s_then50_15s");
+  assert.equal(conditionLabel("pressure"), "15_seconds");
   assert.equal(conditionLabel("no_pressure"), "no_time_limit");
   assert.equal(expectedTrialIds().length, 60);
   assert.equal(new Set(expectedTrialIds()).size, 60);
