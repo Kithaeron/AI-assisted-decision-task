@@ -44,7 +44,9 @@
     @media (prefers-reduced-motion: reduce) {
       .trial-transition,
       .timer-bar,
-      #reportModal {
+      #reportModal,
+      #deadlineModal,
+      #timeoutReasonModal {
         transition-duration: 0ms !important;
       }
     }
@@ -59,16 +61,17 @@
     role="dialog"
     aria-modal="true"
     aria-labelledby="reportModalTitle"
+    aria-hidden="true"
+    inert
   >
     <div class="w-full max-w-2xl rounded-lg bg-white p-6 shadow-xl">
-      <div class="flex items-start justify-between gap-4">
+      <div>
         <div>
           <p id="reportModalKicker" class="text-sm font-semibold uppercase tracking-wide text-slate-500">Decision recorded</p>
           <h2 id="reportModalTitle" class="mt-1 text-xl font-extrabold leading-7 text-slate-950">
             Which information did you rely on when making your final decision? Select all information that directly contributed to your choice. Do not select information that you noticed but did not use.
           </h2>
         </div>
-        <span id="reportRtBadge" class="rounded-md border border-slate-200 bg-slate-50 px-3 py-1 text-sm font-bold tabular-nums text-slate-700"></span>
       </div>
 
       <fieldset id="reportOptions" class="mt-6 space-y-3"></fieldset>
@@ -97,6 +100,51 @@
   </div>
 
   <div
+    id="deadlineModal"
+    class="modal-hidden fixed inset-0 z-50 flex items-center justify-center bg-slate-950/60 px-4 transition duration-150"
+    role="dialog"
+    aria-modal="true"
+    aria-labelledby="deadlineModalTitle"
+    aria-hidden="true"
+    inert
+  >
+    <div class="w-full max-w-2xl rounded-lg bg-white p-6 shadow-xl">
+      <p class="text-sm font-semibold uppercase tracking-wide text-slate-500">Current application</p>
+      <h2 id="deadlineModalTitle" class="mt-1 text-xl font-extrabold leading-7 text-slate-950">Time is up</h2>
+      <p class="mt-4 leading-7 text-slate-700">Please complete your decision for the current application now. The same application will remain on screen.</p>
+      <button id="acknowledgeDeadlineButton" type="button" class="mt-6 w-full rounded-lg bg-slate-950 px-5 py-4 text-lg font-extrabold text-white shadow-md transition hover:bg-slate-800 focus:outline-none focus:ring-4 focus:ring-slate-300">
+        Complete this decision
+      </button>
+    </div>
+  </div>
+
+  <div
+    id="timeoutReasonModal"
+    class="modal-hidden fixed inset-0 z-50 flex items-center justify-center bg-slate-950/60 px-4 transition duration-150"
+    role="dialog"
+    aria-modal="true"
+    aria-labelledby="timeoutReasonTitle"
+    aria-hidden="true"
+    inert
+  >
+    <div class="w-full max-w-2xl rounded-lg bg-white p-6 shadow-xl">
+      <p class="text-sm font-semibold uppercase tracking-wide text-slate-500">Decision recorded</p>
+      <h2 id="timeoutReasonTitle" class="mt-1 text-xl font-extrabold leading-7 text-slate-950">Why were you unable to decide before time ran out?</h2>
+      <p class="mt-2 text-sm font-semibold text-slate-600">Select all that apply.</p>
+      <fieldset id="timeoutReasonOptions" class="mt-6 space-y-3"></fieldset>
+      <div id="timeoutReasonOtherContainer" class="mt-4 hidden">
+        <label for="timeoutReasonOtherText" class="text-sm font-bold text-slate-800">Please briefly describe the other reason.</label>
+        <textarea id="timeoutReasonOtherText" maxlength="250" rows="3" class="mt-2 w-full rounded-md border border-slate-300 px-3 py-2 text-base text-slate-900 focus:border-slate-600 focus:outline-none focus:ring-2 focus:ring-slate-200"></textarea>
+        <p class="mt-2 text-xs font-semibold text-slate-500">Please do not enter names or other personal information.</p>
+      </div>
+      <p id="timeoutReasonError" class="mt-4 hidden rounded-md border border-red-200 bg-red-50 px-4 py-3 text-sm font-semibold text-red-700">Please select at least one option.</p>
+      <button id="submitTimeoutReasonButton" type="button" class="mt-6 w-full rounded-lg bg-slate-950 px-5 py-4 text-lg font-extrabold text-white shadow-md transition hover:bg-slate-800 focus:outline-none focus:ring-4 focus:ring-slate-300">
+        Submit and Continue
+      </button>
+    </div>
+  </div>
+
+  <div
     id="trialTransition"
     class="trial-transition fixed inset-0 z-40 bg-slate-950"
     aria-hidden="true"
@@ -108,8 +156,7 @@
     (() => {
       "use strict";
 
-      // EVIDENCE_REQUIRED: The 54 grey-zone profiles are model-estimated candidates, and the six obvious cases have intended design directions; neither is observed banking ground truth.
-      // The six counterbalance lists embed no-AI ratings across the formal study, but those observed rates must remain distinct from model estimates.
+      // The supplied labels describe a fictional deterministic bank policy, not observed real-world loan outcomes.
       const FIXED_STIMULI = window.FIXED_STIMULI;
       const STIMULUS_SET_VERSION = window.STIMULUS_SET_VERSION;
       if (!Array.isArray(FIXED_STIMULI) || FIXED_STIMULI.length !== 60) {
@@ -117,8 +164,9 @@
       }
       const TOTAL_SESSION_TRIALS = FIXED_STIMULI.length;
       const PROLIFIC_COMPLETION_URL = "https://app.prolific.com/submissions/complete?cc=PUT_COMPLETION_CODE_HERE";
-      const REPORT_SCHEMA_VERSION = "v2_no_ai_recommendation_option";
-      const TRANSITION_HALF_MS = 250;
+      const REPORT_SCHEMA_VERSION = "v3_additional_ai_information_none_option";
+      const DATASET_VERSION = "synthetic-loan-policy-no-error-v1";
+      const TRANSITION_HALF_MS = 200;
       const BACKEND_CONFIG = window.EXPERIMENT_BACKEND_CONFIG || {
         mode: "local_only",
         endpoint: ""
@@ -136,7 +184,7 @@
         pressure: {
           key: "pressure",
           label: "Time pressure",
-          csvLabel: "10_seconds"
+          csvLabel: "pressure_30s_no_ai_15s_ai"
         },
         no_pressure: {
           key: "no_pressure",
@@ -170,11 +218,19 @@
       const reportOptions = document.getElementById("reportOptions");
       const reportError = document.getElementById("reportError");
       const submitReportButton = document.getElementById("submitReportButton");
-      const reportRtBadge = document.getElementById("reportRtBadge");
       const reportModalKicker = document.getElementById("reportModalKicker");
       const reportOtherContainer = document.getElementById("reportOtherContainer");
       const reportOtherText = document.getElementById("reportOtherText");
       const trialTransition = document.getElementById("trialTransition");
+      const deadlineModal = document.getElementById("deadlineModal");
+      const acknowledgeDeadlineButton = document.getElementById("acknowledgeDeadlineButton");
+      const timeoutReasonModal = document.getElementById("timeoutReasonModal");
+      const timeoutReasonOptions = document.getElementById("timeoutReasonOptions");
+      const timeoutReasonOtherContainer = document.getElementById("timeoutReasonOtherContainer");
+      const timeoutReasonOtherText = document.getElementById("timeoutReasonOtherText");
+      const timeoutReasonError = document.getElementById("timeoutReasonError");
+      const submitTimeoutReasonButton = document.getElementById("submitTimeoutReasonButton");
+      trialTransition.style.transitionDuration = `${TRANSITION_HALF_MS}ms`;
 
       const state = {
         participantId,
@@ -191,18 +247,25 @@
         trialElapsedBeforeResumeMs: 0,
         activeDeadlineMs: null,
         timerFrame: null,
+        deadlineTimer: null,
         decisionLocked: false,
         transitioning: false,
+        trialFlowState: "inactive",
+        trialOnsetTimestampIso: "",
+        deadlineTimestampIso: "",
+        timeoutAcknowledgedPerformanceMs: null,
         pendingResponse: null,
         responses: [],
         preSurvey: null,
         postSurvey: null,
         preSurveyCompleted: false,
+        instructionsCompleted: false,
+        phase3IntroShown: false,
         postSurveyCompleted: false
       };
 
       const persistence = window.createExperimentPersistence({
-        storageKey: `ai-loan-experiment:v4:${sessionId}`,
+        storageKey: `ai-loan-experiment:v5:${sessionId}`,
         sessionId,
         backendConfig: BACKEND_CONFIG,
         getSessionSnapshot: serializeSessionState
@@ -282,11 +345,16 @@
           currentTrialIndex: state.currentTrialIndex,
           trialStartEpochMs: state.trialStartEpochMs,
           activeDeadlineMs: state.activeDeadlineMs,
+          trialFlowState: state.trialFlowState,
+          trialOnsetTimestampIso: state.trialOnsetTimestampIso,
+          deadlineTimestampIso: state.deadlineTimestampIso,
           pendingResponse: state.pendingResponse,
           responses: state.responses,
           preSurvey: state.preSurvey,
           postSurvey: state.postSurvey,
           preSurveyCompleted: state.preSurveyCompleted,
+          instructionsCompleted: state.instructionsCompleted,
+          phase3IntroShown: state.phase3IntroShown,
           postSurveyCompleted: state.postSurveyCompleted
         };
       }
@@ -322,11 +390,16 @@
         state.activeDeadlineMs = Number.isFinite(saved.activeDeadlineMs)
           ? Number(saved.activeDeadlineMs)
           : null;
+        state.trialFlowState = saved.trialFlowState || "inactive";
+        state.trialOnsetTimestampIso = saved.trialOnsetTimestampIso || "";
+        state.deadlineTimestampIso = saved.deadlineTimestampIso || "";
         state.pendingResponse = saved.pendingResponse || null;
         state.responses = Array.isArray(saved.responses) ? saved.responses : [];
         state.preSurvey = saved.preSurvey || null;
         state.postSurvey = saved.postSurvey || null;
         state.preSurveyCompleted = Boolean(saved.preSurveyCompleted);
+        state.instructionsCompleted = Boolean(saved.instructionsCompleted);
+        state.phase3IntroShown = Boolean(saved.phase3IntroShown);
         state.postSurveyCompleted = Boolean(saved.postSurveyCompleted);
         return state.preSurveyCompleted;
       }
@@ -367,7 +440,7 @@
           state.responses.push(response);
         }
 
-        state.pendingResponse = response.report_completed === "true" ? null : response;
+        state.pendingResponse = response.record_status === "complete" ? null : response;
         checkpoint(reason);
         persistence.queueUpsert(response.backend_idempotency_key, response);
       }
@@ -459,7 +532,7 @@
       }
 
       function materializeStimulus(profile, profileIndex) {
-        const blockIndex = Math.floor(profileIndex / 10);
+        const blockIndex = Number(profile.counterbalanceBlock) - 1;
         const listIndex = state.counterbalanceList - 1;
         const assignedIndex = (blockIndex - listIndex + COUNTERBALANCE_CONDITIONS.length)
           % COUNTERBALANCE_CONDITIONS.length;
@@ -524,100 +597,35 @@
           <section class="mx-auto flex min-h-screen max-w-5xl items-center px-6 py-10">
             <div class="w-full rounded-lg border border-slate-200 bg-white p-8 shadow-sm">
               <p class="text-sm font-semibold uppercase tracking-wide text-slate-500">TU Delft pilot experiment</p>
-              <div class="mt-3 flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
-                <div>
-                  <h1 class="text-3xl font-extrabold tracking-normal text-slate-950">AI-assisted loan decision task</h1>
-                  <p class="mt-4 max-w-3xl leading-7 text-slate-700">
-                    Review each application and make the best loan decision. Some trials include AI advice or additional information.
-                  </p>
-                </div>
-                <div class="rounded-lg border border-slate-200 bg-slate-50 px-4 py-3 text-sm font-semibold text-slate-700">
-                  <div>Participant: <span class="tabular-nums">${escapeHtml(participantId)}</span></div>
-                  <div class="mt-1">Trials this session: <span class="tabular-nums">${trialCount}</span></div>
-                  <div class="mt-1">Structure: <span class="tabular-nums">10 no-AI, 10 AI-only, 40 with additional information</span></div>
-                </div>
-              </div>
-
-              <div class="mt-8 grid gap-6 lg:grid-cols-[0.8fr_1.2fr]">
-                <section class="rounded-lg border border-slate-200 bg-slate-50 p-5">
-                  <h2 class="text-lg font-bold text-slate-950">Condition</h2>
-                  ${conditionControls()}
-                </section>
-
-                <section class="rounded-lg border border-slate-200 bg-white p-5">
-                  <h2 class="text-lg font-bold text-slate-950">Pre-task questions</h2>
-                  <div class="mt-5 grid gap-5">
-                    ${likertQuestion("pre_ai_familiarity", "I am familiar with AI systems that support financial decisions.", 5)}
-                    ${likertQuestion("pre_ai_limits", "AI recommendations can be useful but may still be wrong.", 5)}
-                    ${likertQuestion("pre_attention", "Attention check: select option 3 for this item.", 5)}
-                  </div>
-                </section>
+              <h1 class="mt-3 text-3xl font-extrabold tracking-normal text-slate-950">Pre-task questions</h1>
+              <div class="mt-8 grid gap-5">
+                ${likertQuestion("pre_ai_familiarity", "I am familiar with AI systems that support financial decisions.", 5)}
+                ${likertQuestion("pre_ai_limits", "AI recommendations can be useful but may still be wrong.", 5)}
               </div>
 
               <p id="welcomeError" class="mt-5 hidden rounded-md border border-red-200 bg-red-50 px-4 py-3 text-sm font-semibold text-red-700">
-                Please answer all pre-task questions before starting.
+                Please answer all pre-task questions before continuing.
               </p>
 
               <div class="mt-8 flex justify-end">
                 <button id="startButton" type="button" class="rounded-lg bg-slate-950 px-6 py-3 text-base font-extrabold text-white shadow-sm transition hover:bg-slate-800 focus:outline-none focus:ring-4 focus:ring-slate-300">
-                  Start Task
+                  Continue
                 </button>
               </div>
             </div>
           </section>
         `;
-
-        if (!isProlificSession) {
-          document.querySelectorAll("[data-condition]").forEach((button) => {
-            button.addEventListener("click", () => {
-              state.conditionKey = button.dataset.condition;
-              checkpoint("condition_changed");
-              renderWelcome();
-            });
-          });
-        }
-
         document.querySelectorAll('input[name^="pre_"]').forEach((input) => {
           input.addEventListener("change", () => {
             state.preSurvey = {
               ...(state.preSurvey || {}),
               [input.name]: input.value
             };
-            state.preSurvey.pre_attention_passed = state.preSurvey.pre_attention === "3";
             checkpoint("pre_questionnaire_response");
             queueQuestionnaire("pre", state.preSurvey);
           });
         });
         document.getElementById("startButton").addEventListener("click", startExperiment);
-      }
-
-      function conditionButton(conditionKey, label) {
-        const active = conditionKey === state.conditionKey;
-        const activeClasses = active
-          ? "border-slate-950 bg-slate-950 text-white"
-          : "border-slate-300 bg-white text-slate-700 hover:bg-slate-50";
-        return `
-          <button type="button" data-condition="${conditionKey}" class="rounded-lg border px-4 py-3 text-left text-sm font-bold transition ${activeClasses}">
-            ${escapeHtml(label)}
-          </button>
-        `;
-      }
-
-      function conditionControls() {
-        if (isProlificSession) {
-          return `
-            <div class="mt-4 rounded-lg border border-slate-200 bg-white px-4 py-3 text-sm font-bold text-slate-800">
-              Assigned condition: ${escapeHtml(conditions[state.conditionKey].label)}
-            </div>
-          `;
-        }
-
-        return `
-          <div class="mt-4 grid gap-3" role="group" aria-label="Experimental condition">
-            ${conditionButton("pressure", "Time pressure: 30s No-AI, 15s AI")}
-            ${conditionButton("no_pressure", "No time limit")}
-          </div>
-        `;
       }
 
       function likertQuestion(name, label, count) {
@@ -655,63 +663,68 @@
       }
 
       async function startExperiment() {
-        const survey = collectRadioValues(["pre_ai_familiarity", "pre_ai_limits", "pre_attention"]);
+        const survey = collectRadioValues(["pre_ai_familiarity", "pre_ai_limits"]);
         if (!survey.isComplete) {
           document.getElementById("welcomeError").classList.remove("hidden");
           return;
         }
 
-        state.preSurvey = {
-          ...survey.values,
-          pre_attention_passed: survey.values.pre_attention === "3"
-        };
+        state.preSurvey = { ...survey.values };
         state.preSurveyCompleted = true;
-        state.trialOrder = buildTrialOrder();
-        state.currentTrialIndex = 0;
-        state.responses = [];
-        state.pendingResponse = null;
         checkpoint("pre_questionnaire_completed");
         queueQuestionnaire("pre", state.preSurvey);
-        await presentCurrentTrial();
+        renderInstructions();
       }
 
-      function renderResume() {
-        const completed = state.responses.length;
-        const pendingReport = Boolean(state.pendingResponse);
+      function renderInstructions() {
+        const timingCopy = state.conditionKey === "pressure"
+          ? "You will have up to 30 seconds for each of the first 10 applications and up to 15 seconds for each later application. Please answer before the timer reaches zero. If time runs out, follow the instruction shown on screen. Your response time is recorded for research but will not be displayed to you."
+          : "There is no fixed response deadline. Please consider the information and make your decision at a natural pace. Your response time is recorded for research but will not be displayed to you.";
         app.innerHTML = `
           <section class="flex min-h-screen items-center justify-center px-6 py-12">
             <div class="w-full max-w-3xl rounded-lg border border-slate-200 bg-white p-8 shadow-sm">
-              <p class="text-sm font-semibold uppercase tracking-wide text-slate-500">Saved session found</p>
-              <h1 class="mt-2 text-3xl font-extrabold tracking-normal text-slate-950">Resume experiment</h1>
-              <p class="mt-5 leading-7 text-slate-700">
-                Your participant ID, condition, counterbalance list, trial order and completed responses were restored from this browser.
-              </p>
-              <dl class="mt-6 grid gap-3 rounded-lg border border-slate-200 bg-slate-50 p-5 text-sm sm:grid-cols-2">
-                <div><dt class="font-semibold text-slate-500">Completed decisions</dt><dd class="mt-1 font-bold text-slate-950">${completed} / ${TOTAL_SESSION_TRIALS}</dd></div>
-                <div><dt class="font-semibold text-slate-500">Next position</dt><dd class="mt-1 font-bold text-slate-950">${Math.min(state.currentTrialIndex + 1, TOTAL_SESSION_TRIALS)}</dd></div>
-                <div><dt class="font-semibold text-slate-500">Condition</dt><dd class="mt-1 font-bold text-slate-950">${escapeHtml(conditions[state.conditionKey].label)}</dd></div>
-                <div><dt class="font-semibold text-slate-500">Counterbalance list</dt><dd class="mt-1 font-bold text-slate-950">${state.counterbalanceList}</dd></div>
-              </dl>
-              <p class="mt-4 text-sm font-semibold text-slate-600">
-                ${pendingReport ? "Your decision was already saved. Resume to complete its follow-up question." : "The active trial will resume from the saved position."}
-              </p>
+              <p class="text-sm font-semibold uppercase tracking-wide text-slate-500">AI-assisted loan decision task</p>
+              <h1 class="mt-2 text-3xl font-extrabold tracking-normal text-slate-950">Instructions</h1>
+              <div class="mt-5 space-y-4 leading-7 text-slate-700">
+                <p>You will review 60 fictional loan applications for a fictional bank. The applications and decisions in this study do not concern real people or real loans.</p>
+                <p>Each application includes information such as annual income, requested loan amount, repayment term, credit score, and savings. Credit scores range from 0 to 1,000; a higher score indicates lower credit risk. Consider all of the information shown when making your decision.</p>
+                <p>For the first 10 applications, make the decision yourself by selecting <strong>Approve</strong> or <strong>Reject</strong>.</p>
+                <p>For the next 10 applications, you will see an AI recommendation. Select <strong>Agree</strong> to make the AI-recommended decision, or <strong>Override</strong> to make the opposite decision.</p>
+                <p>For the final 40 applications, you will also see <strong>Additional AI Information</strong>. The AI may be right or wrong, so continue to use your own judgement.</p>
+                <p>The AI recommendations and Additional AI Information were prepared before the study and do not change in response to your earlier answers.</p>
+                <p>${escapeHtml(timingCopy)}</p>
+              </div>
               <div class="mt-8 flex justify-end">
-                <button id="resumeButton" type="button" class="rounded-lg bg-slate-950 px-6 py-3 text-base font-extrabold text-white shadow-sm transition hover:bg-slate-800 focus:outline-none focus:ring-4 focus:ring-slate-300">
-                  Resume Task
+                <button id="startTrialsButton" type="button" class="rounded-lg bg-slate-950 px-6 py-3 text-base font-extrabold text-white shadow-sm transition hover:bg-slate-800 focus:outline-none focus:ring-4 focus:ring-slate-300">
+                  Start experiment
                 </button>
               </div>
             </div>
           </section>
         `;
-        document.getElementById("resumeButton").addEventListener("click", resumeExperiment);
+        document.getElementById("startTrialsButton").addEventListener("click", startTrials);
       }
 
-      async function resumeExperiment() {
-        if (state.currentTrialIndex >= state.trialOrder.length) {
-          renderPostSurvey();
-          return;
-        }
-        await presentCurrentTrial({ resume: true });
+      async function startTrials() {
+        state.instructionsCompleted = true;
+        state.trialOrder = buildTrialOrder();
+        state.currentTrialIndex = 0;
+        state.responses = [];
+        state.pendingResponse = null;
+        checkpoint("instructions_completed");
+        await presentCurrentTrial();
+      }
+
+      function renderInterrupted() {
+        app.innerHTML = `
+          <section class="flex min-h-screen items-center justify-center px-6 py-12">
+            <div class="w-full max-w-3xl rounded-lg border border-slate-200 bg-white p-8 shadow-sm">
+              <p class="text-sm font-semibold uppercase tracking-wide text-slate-500">Experiment interrupted</p>
+              <h1 class="mt-2 text-3xl font-extrabold tracking-normal text-slate-950">This session was interrupted.</h1>
+              <p class="mt-5 leading-7 text-slate-700">Please ask the researcher for assistance.</p>
+            </div>
+          </section>
+        `;
       }
 
       function transitionDelay() {
@@ -731,6 +744,8 @@
       function stopTimer() {
         cancelAnimationFrame(state.timerFrame);
         state.timerFrame = null;
+        window.clearTimeout(state.deadlineTimer);
+        state.deadlineTimer = null;
       }
 
       function setDecisionButtonsDisabled(disabled) {
@@ -742,6 +757,12 @@
             button.classList.toggle("cursor-not-allowed", disabled);
           }
         });
+      }
+
+      function setModalOpen(modal, open) {
+        modal.classList.toggle("modal-hidden", !open);
+        modal.setAttribute("aria-hidden", String(!open));
+        modal.inert = !open;
       }
 
       async function presentCurrentTrial(options = {}) {
@@ -760,11 +781,7 @@
         state.transitioning = false;
         if (state.pendingResponse && state.pendingResponse.report_completed !== "true") {
           state.decisionLocked = true;
-          openReportModal(
-            state.pendingResponse.user_choice,
-            Number(state.pendingResponse.decision_rt_ms),
-            state.trialOrder[state.currentTrialIndex]
-          );
+          openReportModal(state.trialOrder[state.currentTrialIndex]);
           return;
         }
 
@@ -776,10 +793,8 @@
       function renderTrial() {
         const stimulus = state.trialOrder[state.currentTrialIndex];
         const applicant = stimulus.applicant;
-        const condition = conditions[state.conditionKey];
         const deadlineMs = getTrialDeadlineMs(stimulus);
         const trialNumber = state.currentTrialIndex + 1;
-        const progressPercent = Math.round((trialNumber / state.trialOrder.length) * 100);
         const tone = decisionTone(applicant.aiRecommendation);
 
         stopTimer();
@@ -793,20 +808,19 @@
                   <div>
                     <p class="text-sm font-semibold uppercase tracking-wide text-slate-500">AI-assisted decision task</p>
                     <h1 class="mt-1 text-2xl font-extrabold tracking-normal text-slate-950">Trial ${trialNumber} / ${state.trialOrder.length}</h1>
-                    <p class="mt-1 text-sm font-semibold text-slate-600">Condition: ${escapeHtml(condition.label)}</p>
                   </div>
 
-                  <div class="w-full max-w-xl">
+                  ${deadlineMs ? `<div class="w-full max-w-xl">
                     <div class="mb-2 flex items-center justify-between">
-                      <span id="timerModeLabel" class="text-sm font-bold text-slate-700">${deadlineMs ? "Time remaining" : "No countdown"}</span>
+                      <span id="timerModeLabel" class="text-sm font-bold text-slate-700">Time remaining</span>
                       <span id="timerText" class="rounded-md border border-slate-200 bg-slate-50 px-3 py-1 text-lg font-extrabold tabular-nums text-slate-800">
-                        ${deadlineMs ? `${(deadlineMs / 1000).toFixed(2).padStart(5, "0")}s` : "No limit"}
+                        ${(deadlineMs / 1000).toFixed(2).padStart(5, "0")}s
                       </span>
                     </div>
                     <div class="h-3 overflow-hidden rounded-full bg-slate-200" aria-label="Trial progress">
-                      <div id="timerBar" class="timer-bar h-full rounded-full ${deadlineMs ? "bg-red-600" : "bg-slate-400"}" style="width:${deadlineMs ? "100" : progressPercent}%"></div>
+                      <div id="timerBar" class="timer-bar h-full rounded-full bg-red-600" style="width:100%"></div>
                     </div>
-                  </div>
+                  </div>` : ""}
                 </div>
               </div>
             </header>
@@ -849,11 +863,11 @@
         `;
 
         if (stimulus.trialType === "no_ai_baseline") {
-          document.getElementById("approveButton").addEventListener("click", () => recordDecision("approve_loan"));
-          document.getElementById("rejectButton").addEventListener("click", () => recordDecision("reject_loan"));
+          document.getElementById("approveButton").addEventListener("click", () => attemptDecision("approve_loan"));
+          document.getElementById("rejectButton").addEventListener("click", () => attemptDecision("reject_loan"));
         } else {
-          document.getElementById("agreeButton").addEventListener("click", () => recordDecision("agree_ai"));
-          document.getElementById("overrideButton").addEventListener("click", () => recordDecision("override_ai"));
+          document.getElementById("agreeButton").addEventListener("click", () => attemptDecision("agree_ai"));
+          document.getElementById("overrideButton").addEventListener("click", () => attemptDecision("override_ai"));
         }
         setDecisionButtonsDisabled(true);
       }
@@ -915,28 +929,25 @@
       function cueCard(cue) {
         return `
           <article class="rounded-lg border border-slate-200 bg-slate-50 p-5">
-            <h3 class="mb-3 text-base font-extrabold text-slate-950">Additional AI information</h3>
+            <h3 class="mb-3 text-base font-extrabold text-slate-950">Additional AI Information</h3>
             <p class="text-base leading-7 text-slate-800">${escapeHtml(cue.text)}</p>
           </article>
         `;
       }
 
-      function activateTrialTiming(resume) {
+      function activateTrialTiming() {
         const stimulus = state.trialOrder[state.currentTrialIndex];
         state.activeDeadlineMs = getTrialDeadlineMs(stimulus);
-
-        if (resume && state.trialStartEpochMs > 0) {
-          state.trialElapsedBeforeResumeMs = Math.max(
-            0,
-            Date.now() - state.trialStartEpochMs
-          );
-        } else {
-          state.trialStartEpochMs = Date.now();
-          state.trialElapsedBeforeResumeMs = 0;
-        }
-
+        state.trialStartEpochMs = Date.now();
+        state.trialElapsedBeforeResumeMs = 0;
         state.trialStartMs = performance.now();
-        checkpoint(resume ? "trial_resumed" : "trial_started");
+        state.trialOnsetTimestampIso = new Date(state.trialStartEpochMs).toISOString();
+        state.deadlineTimestampIso = state.activeDeadlineMs
+          ? new Date(state.trialStartEpochMs + state.activeDeadlineMs).toISOString()
+          : "";
+        state.timeoutAcknowledgedPerformanceMs = null;
+        state.trialFlowState = "active";
+        checkpoint("trial_started");
         startTimer();
       }
 
@@ -949,76 +960,64 @@
         const deadlineMs = state.activeDeadlineMs;
         const timerText = document.getElementById("timerText");
         const timerBar = document.getElementById("timerBar");
-
-        if (!deadlineMs) {
+        if (!deadlineMs || !timerText || !timerBar) {
           return;
         }
 
         function updateTimer() {
-          if (state.decisionLocked) {
+          if (state.trialFlowState !== "active") {
             return;
           }
-
           const elapsed = currentTrialElapsedMs();
           const remaining = Math.max(deadlineMs - elapsed, 0);
-          const percentage = (remaining / deadlineMs) * 100;
-
           timerText.textContent = `${(remaining / 1000).toFixed(2).padStart(5, "0")}s`;
-          timerBar.style.width = `${percentage}%`;
-
+          timerBar.style.width = `${(remaining / deadlineMs) * 100}%`;
           if (remaining <= 0) {
-            recordDecision("timeout");
+            handleDeadlineExceeded();
             return;
           }
-
           state.timerFrame = requestAnimationFrame(updateTimer);
         }
 
-        if (currentTrialElapsedMs() >= deadlineMs) {
-          recordDecision("timeout");
-          return;
-        }
+        state.deadlineTimer = window.setTimeout(
+          () => handleDeadlineExceeded(),
+          Math.max(0, deadlineMs - currentTrialElapsedMs())
+        );
         state.timerFrame = requestAnimationFrame(updateTimer);
       }
 
-      function recordDecision(userChoice) {
-        if (state.decisionLocked) {
+      function attemptDecision(userChoice) {
+        if (state.decisionLocked || !["active", "overtime_decision"].includes(state.trialFlowState)) {
           return;
         }
+        if (
+          state.trialFlowState === "active"
+          && state.activeDeadlineMs
+          && currentTrialElapsedMs() >= state.activeDeadlineMs
+        ) {
+          handleDeadlineExceeded();
+          return;
+        }
+        completeDecision(userChoice, state.trialFlowState === "overtime_decision");
+      }
 
-        state.decisionLocked = true;
-        stopTimer();
-
+      function buildTrialResponse(deadlineExceeded) {
         const stimulus = state.trialOrder[state.currentTrialIndex];
         const applicant = stimulus.applicant;
         const condition = conditions[state.conditionKey];
-        const reactionTimeMs = Math.max(0, Math.round(currentTrialElapsedMs()));
-        let userFinalDecision = "";
-
-        if (userChoice !== "timeout") {
-          if (stimulus.trialType === "no_ai_baseline") {
-            userFinalDecision = userChoice === "approve_loan" ? "APPROVE" : "REJECT";
-          } else {
-            userFinalDecision = userChoice === "agree_ai"
-              ? applicant.aiRecommendation
-              : oppositeDecision(applicant.aiRecommendation);
-          }
-        }
-
         const warrantedCue = stimulus.warrantedCue;
         const unwarrantedCue = stimulus.unwarrantedCue;
         const cue1 = stimulus.cues[0];
         const cue2 = stimulus.cues[1];
         const aiWasShown = stimulus.trialType !== "no_ai_baseline";
-        const timedOut = userChoice === "timeout";
-        const reportWillBeShown = stimulus.askRetrospectiveReport && !timedOut;
-        const backendIdempotencyKey = trialIdempotencyKey(stimulus.trialId);
 
-        state.pendingResponse = {
+        return {
           participant_id: state.participantId,
           study_id: state.studyId,
           session_id: state.sessionId,
           seed: state.seed,
+          dataset_version: stimulus.datasetVersion || DATASET_VERSION,
+          manifest_version: stimulus.manifestVersion || STIMULUS_SET_VERSION,
           stimulus_set_version: STIMULUS_SET_VERSION,
           condition: condition.csvLabel,
           counterbalance_list: state.counterbalanceList,
@@ -1034,12 +1033,15 @@
           trial_deadline_ms: state.activeDeadlineMs ?? "",
           trial_deadline_seconds: state.activeDeadlineMs ? state.activeDeadlineMs / 1000 : "",
           deadline_policy: getDeadlinePolicy(stimulus),
-          timer_started_timestamp_iso: state.trialStartEpochMs
-            ? new Date(state.trialStartEpochMs).toISOString()
-            : "",
+          trial_onset_timestamp_iso: state.trialOnsetTimestampIso,
+          timer_started_timestamp_iso: state.trialOnsetTimestampIso,
+          deadline_timestamp_iso: state.deadlineTimestampIso,
+          deadline_exceeded_timestamp_iso: deadlineExceeded ? new Date().toISOString() : "",
+          timeout_modal_ack_timestamp_iso: "",
+          final_choice_timestamp_iso: "",
           transition_duration_ms: transitionDelay() * 2,
           rt_excludes_transition: "true",
-          report_prompt_shown: String(reportWillBeShown),
+          report_prompt_shown: String(stimulus.askRetrospectiveReport),
           report_schema_version: REPORT_SCHEMA_VERSION,
           conflict_validation_status: stimulus.conflictValidationStatus,
           observed_no_ai_approve_rate: stimulus.observedNoAiApproveRate,
@@ -1087,49 +1089,215 @@
           ai_recommendation: applicant.aiRecommendation,
           ai_recommendation_shown: String(aiWasShown),
           ai_matches_model_estimate_synthetic: aiWasShown ? String(applicant.aiIsCorrect) : "",
-          user_choice: userChoice,
-          user_agreed_with_ai: timedOut || !aiWasShown ? "" : String(userChoice === "agree_ai"),
-          user_final_decision: userFinalDecision,
-          user_decision_matches_model_estimate: timedOut
-            ? ""
-            : String(userFinalDecision === applicant.modelEstimatedClass),
-          obvious_response_matches_direction: timedOut || !stimulus.isObviousCase
-            ? ""
-            : String(userFinalDecision === stimulus.intendedObviousDirection),
-          decision_rt_ms: reactionTimeMs,
-          decision_rt_seconds: (reactionTimeMs / 1000).toFixed(3),
-          timed_out: String(timedOut),
-          decision_timestamp_iso: new Date().toISOString(),
-          report_completed: String(!reportWillBeShown),
+          deadline_exceeded: String(deadlineExceeded),
+          decision_completed: "false",
+          decision_completed_on_time: state.conditionKey === "no_pressure" ? "" : "false",
+          user_choice: "",
+          user_agreed_with_ai: "",
+          user_final_decision: "",
+          user_decision_matches_model_estimate: "",
+          obvious_response_matches_direction: "",
+          decision_rt_total_ms: "",
+          decision_rt_on_time_ms: "",
+          decision_rt_untimed_ms: "",
+          decision_rt_ms: "",
+          decision_rt_seconds: "",
+          overtime_ms: "",
+          post_timeout_decision_ms: "",
+          timed_out: String(deadlineExceeded),
+          decision_timestamp_iso: "",
+          timeout_reason_codes: [],
+          timeout_reason_other_text: "",
+          timeout_reason_timestamp_iso: "",
+          report_completed: String(!stimulus.askRetrospectiveReport),
           reported_information: "",
           reported_cue_ids: "",
           reported_cue_categories: "",
           reported_warranted_cue: "",
           reported_unwarranted_cue: "",
           reported_ai_recommendation: "",
+          reported_no_additional_ai_information: "",
           reported_other: "",
           reported_other_text: "",
           report_timestamp_iso: "",
           current_warranted_cue_position: "",
           current_unwarranted_cue_position: "",
+          record_status: deadlineExceeded ? "deadline_exceeded_incomplete" : "decision_pending",
           data_collection_mode: persistence.mode,
-          backend_idempotency_key: backendIdempotencyKey
+          backend_idempotency_key: trialIdempotencyKey(stimulus.trialId)
+        };
+      }
+
+      function handleDeadlineExceeded() {
+        if (state.trialFlowState !== "active" || !state.activeDeadlineMs) {
+          return;
+        }
+        state.decisionLocked = true;
+        state.trialFlowState = "deadline_modal";
+        stopTimer();
+        setDecisionButtonsDisabled(true);
+        const timerText = document.getElementById("timerText");
+        const timerBar = document.getElementById("timerBar");
+        if (timerText) timerText.textContent = "00.00s";
+        if (timerBar) timerBar.style.width = "0%";
+
+        state.pendingResponse = buildTrialResponse(true);
+        upsertResponse(state.pendingResponse, "deadline_exceeded_incomplete");
+        setModalOpen(deadlineModal, true);
+        acknowledgeDeadlineButton.focus();
+      }
+
+      function acknowledgeDeadline() {
+        if (state.trialFlowState !== "deadline_modal") {
+          return;
+        }
+        acknowledgeDeadlineButton.disabled = true;
+        const acknowledgedIso = new Date().toISOString();
+        state.timeoutAcknowledgedPerformanceMs = performance.now();
+        state.trialFlowState = "overtime_decision";
+        const updatedResponse = {
+          ...state.pendingResponse,
+          timeout_modal_ack_timestamp_iso: acknowledgedIso,
+          record_status: "deadline_acknowledged_incomplete"
+        };
+        upsertResponse(updatedResponse, "deadline_modal_acknowledged");
+        setModalOpen(deadlineModal, false);
+        acknowledgeDeadlineButton.disabled = false;
+        state.decisionLocked = false;
+        setDecisionButtonsDisabled(false);
+      }
+
+      function completeDecision(userChoice, deadlineExceeded) {
+        state.decisionLocked = true;
+        setDecisionButtonsDisabled(true);
+        stopTimer();
+
+        const stimulus = state.trialOrder[state.currentTrialIndex];
+        const applicant = stimulus.applicant;
+        const aiWasShown = stimulus.trialType !== "no_ai_baseline";
+        const reactionTimeMs = Math.max(0, Math.round(currentTrialElapsedMs()));
+        const finalChoiceTimestampIso = new Date().toISOString();
+        const userFinalDecision = stimulus.trialType === "no_ai_baseline"
+          ? (userChoice === "approve_loan" ? "APPROVE" : "REJECT")
+          : (userChoice === "agree_ai" ? applicant.aiRecommendation : oppositeDecision(applicant.aiRecommendation));
+        const response = deadlineExceeded && state.pendingResponse
+          ? { ...state.pendingResponse }
+          : buildTrialResponse(false);
+        const reportWillBeShown = stimulus.askRetrospectiveReport;
+
+        state.trialFlowState = deadlineExceeded
+          ? "timeout_reason"
+          : (reportWillBeShown ? "retrospective_information_report" : "complete");
+
+        const completedResponse = {
+          ...response,
+          deadline_exceeded: String(deadlineExceeded),
+          decision_completed: "true",
+          decision_completed_on_time: state.conditionKey === "no_pressure"
+            ? ""
+            : String(!deadlineExceeded),
+          user_choice: userChoice,
+          user_agreed_with_ai: aiWasShown ? String(userChoice === "agree_ai") : "",
+          user_final_decision: userFinalDecision,
+          user_decision_matches_model_estimate: String(userFinalDecision === applicant.modelEstimatedClass),
+          obvious_response_matches_direction: stimulus.isObviousCase
+            ? String(userFinalDecision === stimulus.intendedObviousDirection)
+            : "",
+          decision_rt_total_ms: reactionTimeMs,
+          decision_rt_on_time_ms: state.conditionKey === "pressure" && !deadlineExceeded ? reactionTimeMs : "",
+          decision_rt_untimed_ms: state.conditionKey === "no_pressure" ? reactionTimeMs : "",
+          decision_rt_ms: deadlineExceeded ? "" : reactionTimeMs,
+          decision_rt_seconds: deadlineExceeded ? "" : (reactionTimeMs / 1000).toFixed(3),
+          overtime_ms: deadlineExceeded ? Math.max(0, reactionTimeMs - state.activeDeadlineMs) : "",
+          post_timeout_decision_ms: deadlineExceeded && state.timeoutAcknowledgedPerformanceMs !== null
+            ? Math.max(0, Math.round(performance.now() - state.timeoutAcknowledgedPerformanceMs))
+            : "",
+          final_choice_timestamp_iso: finalChoiceTimestampIso,
+          decision_timestamp_iso: finalChoiceTimestampIso,
+          report_completed: String(!reportWillBeShown),
+          record_status: deadlineExceeded
+            ? "decision_saved_reason_pending"
+            : (reportWillBeShown ? "decision_saved_report_pending" : "complete")
         };
 
-        upsertResponse(state.pendingResponse, timedOut ? "timeout_saved" : "decision_saved");
+        upsertResponse(completedResponse, deadlineExceeded ? "late_decision_saved" : "decision_saved");
 
-        if (timedOut) {
-          advanceTrial();
+        if (deadlineExceeded) {
+          openTimeoutReasonModal(stimulus);
         } else if (reportWillBeShown) {
-          openReportModal(userChoice, reactionTimeMs, stimulus);
+          openReportModal(stimulus);
         } else {
           advanceTrial();
         }
       }
 
-      function openReportModal(userChoice, reactionTimeMs, stimulus) {
+      function openTimeoutReasonModal(stimulus) {
+        timeoutReasonError.classList.add("hidden");
+        timeoutReasonOtherContainer.classList.add("hidden");
+        timeoutReasonOtherText.value = "";
+        const options = [
+          ["needed_more_applicant_review", "I needed more time to review the applicant information."],
+          ...(stimulus.trialType === "no_ai_baseline" ? [] : [["needed_more_ai_or_additional_information", "I needed more time to consider the AI recommendation or Additional AI Information."]]),
+          ["uncertain_between_options", "I was uncertain between the two options."],
+          ["distracted_or_interrupted", "I was distracted or interrupted."],
+          ["technical_or_display_problem", "There was a technical or display problem."],
+          ["other", "Other."]
+        ];
+        timeoutReasonOptions.innerHTML = options.map(([value, label]) => `
+          <label class="flex cursor-pointer items-start gap-3 rounded-lg border border-slate-200 p-4 transition hover:bg-slate-50">
+            <input type="checkbox" value="${value}" class="mt-1 h-5 w-5 rounded border-slate-300 text-slate-950 focus:ring-slate-400" />
+            <span class="text-base font-semibold text-slate-800">${escapeHtml(label)}</span>
+          </label>
+        `).join("");
+        timeoutReasonOptions.querySelector('input[value="other"]').addEventListener("change", (event) => {
+          timeoutReasonOtherContainer.classList.toggle("hidden", !event.target.checked);
+          if (event.target.checked) timeoutReasonOtherText.focus();
+          else timeoutReasonOtherText.value = "";
+        });
+        setModalOpen(timeoutReasonModal, true);
+        submitTimeoutReasonButton.disabled = false;
+        submitTimeoutReasonButton.focus();
+      }
+
+      function submitTimeoutReason() {
+        if (submitTimeoutReasonButton.disabled || state.trialFlowState !== "timeout_reason") {
+          return;
+        }
+        const selected = Array.from(timeoutReasonOptions.querySelectorAll('input[type="checkbox"]:checked'))
+          .map((input) => input.value);
+        const otherText = timeoutReasonOtherText.value.trim();
+        if (selected.length === 0) {
+          timeoutReasonError.textContent = "Please select at least one option.";
+          timeoutReasonError.classList.remove("hidden");
+          return;
+        }
+        if (selected.includes("other") && !otherText) {
+          timeoutReasonError.textContent = "Please briefly describe the other reason.";
+          timeoutReasonError.classList.remove("hidden");
+          timeoutReasonOtherText.focus();
+          return;
+        }
+
+        submitTimeoutReasonButton.disabled = true;
+        const stimulus = state.trialOrder[state.currentTrialIndex];
+        const reportWillBeShown = stimulus.askRetrospectiveReport;
+        const completedResponse = {
+          ...state.pendingResponse,
+          timeout_reason_codes: selected,
+          timeout_reason_other_text: selected.includes("other") ? otherText : "",
+          timeout_reason_timestamp_iso: new Date().toISOString(),
+          record_status: reportWillBeShown ? "timeout_reason_saved_report_pending" : "complete"
+        };
+        state.trialFlowState = reportWillBeShown ? "retrospective_information_report" : "complete";
+        upsertResponse(completedResponse, "timeout_reason_saved");
+        setModalOpen(timeoutReasonModal, false);
+        submitTimeoutReasonButton.disabled = false;
+        if (reportWillBeShown) openReportModal(stimulus);
+        else advanceTrial();
+      }
+
+      function openReportModal(stimulus) {
         reportError.classList.add("hidden");
-        reportRtBadge.textContent = `RT ${reactionTimeMs} ms`;
         reportModalKicker.textContent = "Decision recorded";
         reportOtherContainer.classList.add("hidden");
         reportOtherText.value = "";
@@ -1141,8 +1309,13 @@
             meta: `${cue.category}:${cue.id}`
           })),
           {
+            value: "no_additional_ai_information",
+            label: "I did not use any Additional AI Information",
+            meta: "none"
+          },
+          {
             value: "other",
-            label: "Other or not sure",
+            label: "Other",
             meta: "other"
           }
         ];
@@ -1160,6 +1333,20 @@
         `).join("");
 
         const otherCheckbox = reportOptions.querySelector('input[value="other"]');
+        const noneCheckbox = reportOptions.querySelector('input[value="no_additional_ai_information"]');
+        reportOptions.querySelectorAll('input[type="checkbox"]').forEach((checkbox) => {
+          checkbox.addEventListener("change", () => {
+            if (checkbox === noneCheckbox && checkbox.checked) {
+              reportOptions.querySelectorAll('input[type="checkbox"]').forEach((candidate) => {
+                if (candidate !== noneCheckbox) candidate.checked = false;
+              });
+              reportOtherContainer.classList.add("hidden");
+              reportOtherText.value = "";
+            } else if (checkbox !== noneCheckbox && checkbox.checked) {
+              noneCheckbox.checked = false;
+            }
+          });
+        });
         otherCheckbox.addEventListener("change", () => {
           reportOtherContainer.classList.toggle("hidden", !otherCheckbox.checked);
           if (otherCheckbox.checked) {
@@ -1168,12 +1355,12 @@
             reportOtherText.value = "";
           }
         });
-        reportModal.classList.remove("modal-hidden");
+        setModalOpen(reportModal, true);
         submitReportButton.focus();
       }
 
       function closeReportModal() {
-        reportModal.classList.add("modal-hidden");
+        setModalOpen(reportModal, false);
         reportOptions.innerHTML = "";
         reportOtherContainer.classList.add("hidden");
         reportOtherText.value = "";
@@ -1198,6 +1385,7 @@
           .filter((value) => value.includes(":"))
           .map((value) => value.split(":")[0]);
         const otherSelected = reportedValues.includes("other");
+        const noneSelected = reportedValues.includes("no_additional_ai_information");
         const otherText = reportOtherText.value.trim();
 
         if (otherSelected && !otherText) {
@@ -1216,11 +1404,13 @@
           reported_warranted_cue: String(reportedCueCategories.includes("warranted")),
           reported_unwarranted_cue: String(reportedCueCategories.includes("unwarranted")),
           reported_ai_recommendation: "",
+          reported_no_additional_ai_information: String(noneSelected),
           reported_other: String(otherSelected),
           reported_other_text: otherSelected ? otherText : "",
           report_timestamp_iso: new Date().toISOString(),
           current_warranted_cue_position: stimulus.cues.findIndex((cue) => cue.category === "warranted") + 1,
-          current_unwarranted_cue_position: stimulus.cues.findIndex((cue) => cue.category === "unwarranted") + 1
+          current_unwarranted_cue_position: stimulus.cues.findIndex((cue) => cue.category === "unwarranted") + 1,
+          record_status: "complete"
         };
 
         upsertResponse(completedResponse, "retrospective_saved");
@@ -1234,13 +1424,36 @@
         state.trialStartEpochMs = 0;
         state.trialElapsedBeforeResumeMs = 0;
         state.activeDeadlineMs = null;
+        state.trialFlowState = "inactive";
+        state.trialOnsetTimestampIso = "";
+        state.deadlineTimestampIso = "";
         checkpoint("trial_advanced");
 
         if (state.currentTrialIndex >= state.trialOrder.length) {
           renderPostSurvey();
+        } else if (state.currentTrialIndex === 20 && !state.phase3IntroShown) {
+          state.phase3IntroShown = true;
+          checkpoint("phase_3_intro_shown");
+          renderPhase3Intro();
         } else {
           presentCurrentTrial();
         }
+      }
+
+      function renderPhase3Intro() {
+        app.innerHTML = `
+          <section class="flex min-h-screen items-center justify-center px-6 py-12">
+            <div class="w-full max-w-3xl rounded-lg border border-slate-200 bg-white p-8 shadow-sm">
+              <p class="text-sm font-semibold uppercase tracking-wide text-slate-500">AI-assisted loan decision task</p>
+              <h1 class="mt-2 text-3xl font-extrabold tracking-normal text-slate-950">Next phase</h1>
+              <p class="mt-5 leading-7 text-slate-700">The remaining applications will include Additional AI Information alongside the AI recommendation. This information may help you evaluate the recommendation. Continue to use your own judgement when deciding whether to agree with or override the AI.</p>
+              <div class="mt-8 flex justify-end">
+                <button id="continuePhase3Button" type="button" class="rounded-lg bg-slate-950 px-6 py-3 text-base font-extrabold text-white shadow-sm transition hover:bg-slate-800 focus:outline-none focus:ring-4 focus:ring-slate-300">Continue</button>
+              </div>
+            </div>
+          </section>
+        `;
+        document.getElementById("continuePhase3Button").addEventListener("click", () => presentCurrentTrial());
       }
 
       function renderPostSurvey() {
@@ -1253,7 +1466,6 @@
                 ${likertQuestion("post_ai_trust", "I trusted the AI recommendation during the task.", 5)}
                 ${likertQuestion("post_time_pressure", "I felt time pressure while making decisions.", 5)}
                 ${likertQuestion("post_strategy", "I tried to compare the additional AI information with the applicant data.", 5)}
-                ${likertQuestion("post_attention", "Attention check: select option 4 for this item.", 5)}
               </div>
 
               <p id="postError" class="mt-5 hidden rounded-md border border-red-200 bg-red-50 px-4 py-3 text-sm font-semibold text-red-700">
@@ -1262,7 +1474,7 @@
 
               <div class="mt-8 flex justify-end">
                 <button id="finishButton" type="button" class="rounded-lg bg-slate-950 px-6 py-3 text-base font-extrabold text-white shadow-sm transition hover:bg-slate-800 focus:outline-none focus:ring-4 focus:ring-slate-300">
-                  Finish and Download CSV
+                  Finish
                 </button>
               </div>
             </div>
@@ -1275,7 +1487,6 @@
               ...(state.postSurvey || {}),
               [input.name]: input.value
             };
-            state.postSurvey.post_attention_passed = state.postSurvey.post_attention === "4";
             checkpoint("post_questionnaire_response");
             queueQuestionnaire("post", state.postSurvey);
           });
@@ -1284,16 +1495,13 @@
       }
 
       async function finishExperiment() {
-        const survey = collectRadioValues(["post_ai_trust", "post_time_pressure", "post_strategy", "post_attention"]);
+        const survey = collectRadioValues(["post_ai_trust", "post_time_pressure", "post_strategy"]);
         if (!survey.isComplete) {
           document.getElementById("postError").classList.remove("hidden");
           return;
         }
 
-        state.postSurvey = {
-          ...survey.values,
-          post_attention_passed: survey.values.post_attention === "4"
-        };
+        state.postSurvey = { ...survey.values };
         state.postSurveyCompleted = true;
         checkpoint("post_questionnaire_completed");
         queueQuestionnaire("post", state.postSurvey);
@@ -1301,48 +1509,33 @@
         downloadCsv();
         await persistence.flushRetryQueue({ force: true });
         renderComplete();
-        monitorBackendCompletion();
+        if (persistence.endpointConfigured) {
+          monitorBackendCompletion();
+        } else {
+          clearCompletedSession();
+        }
       }
 
       function renderComplete() {
-        const localOnly = persistence.mode === "local_only";
-        const pending = persistence.pendingCount();
-        const statusMessage = localOnly
-          ? "Your data is checkpointed in this browser and the CSV backup has downloaded. No approved backend endpoint is configured, so server saving and automatic Prolific redirection are disabled."
-          : pending > 0
-            ? `The CSV backup has downloaded. Waiting for ${pending} backend record${pending === 1 ? "" : "s"} to be acknowledged before completion.`
-            : "All configured backend records have been acknowledged. The CSV backup has downloaded.";
         app.innerHTML = `
           <section class="flex min-h-screen items-center justify-center px-6 py-12">
             <div class="w-full max-w-3xl rounded-lg border border-slate-200 bg-white p-8 text-center shadow-sm">
               <p class="text-sm font-semibold uppercase tracking-wide text-slate-500">Complete</p>
               <h1 class="mt-2 text-3xl font-extrabold tracking-normal text-slate-950">Thank you</h1>
-              <p id="backendCompletionStatus" class="mx-auto mt-5 max-w-2xl leading-7 text-slate-700">
-                ${escapeHtml(statusMessage)}
-              </p>
-              <div class="mt-8 flex flex-col items-center justify-center gap-3 sm:flex-row">
-                <button id="downloadAgainButton" type="button" class="rounded-lg bg-slate-950 px-5 py-3 text-sm font-extrabold text-white shadow-sm transition hover:bg-slate-800 focus:outline-none focus:ring-4 focus:ring-slate-300">
-                  Download CSV Again
-                </button>
-                ${!localOnly && pending > 0 ? `
-                  <button id="retryBackendButton" type="button" class="rounded-lg border border-slate-300 bg-white px-5 py-3 text-sm font-extrabold text-slate-800 transition hover:bg-slate-50 focus:outline-none focus:ring-4 focus:ring-slate-200">
-                    Retry Saving
-                  </button>
-                ` : ""}
-              </div>
+              <p class="mx-auto mt-5 max-w-2xl leading-7 text-slate-700">Thank you for completing the study.</p>
             </div>
           </section>
         `;
+      }
 
-        document.getElementById("downloadAgainButton").addEventListener("click", downloadCsv);
-        const retryButton = document.getElementById("retryBackendButton");
-        if (retryButton) {
-          retryButton.addEventListener("click", async () => {
-            retryButton.disabled = true;
-            await persistence.flushRetryQueue({ force: true });
-            renderComplete();
-            monitorBackendCompletion();
-          });
+      function clearCompletedSession() {
+        persistence.clear();
+        if (!isProlificSession) {
+          try {
+            window.localStorage.removeItem("ai-loan-experiment:development-identity");
+          } catch {
+            // Completion remains valid if identity cleanup is unavailable.
+          }
         }
       }
 
@@ -1351,10 +1544,7 @@
           return;
         }
         if (persistence.allAcknowledged()) {
-          const status = document.getElementById("backendCompletionStatus");
-          if (status) {
-            status.textContent = "All configured backend records have been acknowledged. Completion is ready.";
-          }
+          clearCompletedSession();
           if (isCompletionUrlConfigured()) {
             window.setTimeout(() => {
               window.location.href = PROLIFIC_COMPLETION_URL;
@@ -1365,7 +1555,6 @@
 
         window.setTimeout(async () => {
           await persistence.flushRetryQueue();
-          renderComplete();
           monitorBackendCompletion();
         }, 1000);
       }
@@ -1380,9 +1569,22 @@
       }
 
       function getCsvRows() {
+        const obviousResponses = state.responses.filter(
+          (response) => response.is_obvious_case === "true" && response.decision_completed === "true"
+        );
+        const obviousErrors = obviousResponses.filter(
+          (response) => response.obvious_response_matches_direction === "false"
+        ).length;
+        const sessionQualityFlag = obviousResponses.length < 6
+          ? "incomplete"
+          : (obviousErrors >= 3 ? "review_exclusion_threshold_met" : "pass");
         return state.responses.map((response) => ({
           ...response,
           backend_record_status: persistence.statusFor(response.backend_idempotency_key),
+          obvious_cases_completed: obviousResponses.length,
+          obvious_case_errors: obviousErrors,
+          session_quality_flag: sessionQualityFlag,
+          questionnaire_attention_items_displayed: "false",
           pre_ai_familiarity: state.preSurvey?.pre_ai_familiarity ?? "",
           pre_ai_limits: state.preSurvey?.pre_ai_limits ?? "",
           pre_attention: state.preSurvey?.pre_attention ?? "",
@@ -1401,6 +1603,8 @@
           "study_id",
           "session_id",
           "seed",
+          "dataset_version",
+          "manifest_version",
           "stimulus_set_version",
           "condition",
           "counterbalance_list",
@@ -1416,7 +1620,12 @@
           "trial_deadline_ms",
           "trial_deadline_seconds",
           "deadline_policy",
+          "trial_onset_timestamp_iso",
           "timer_started_timestamp_iso",
+          "deadline_timestamp_iso",
+          "deadline_exceeded_timestamp_iso",
+          "timeout_modal_ack_timestamp_iso",
+          "final_choice_timestamp_iso",
           "transition_duration_ms",
           "rt_excludes_transition",
           "report_prompt_shown",
@@ -1467,21 +1676,35 @@
           "ai_recommendation",
           "ai_recommendation_shown",
           "ai_matches_model_estimate_synthetic",
+          "deadline_exceeded",
+          "decision_completed",
+          "decision_completed_on_time",
           "user_choice",
           "user_agreed_with_ai",
           "user_final_decision",
           "user_decision_matches_model_estimate",
           "obvious_response_matches_direction",
+          "decision_rt_total_ms",
+          "decision_rt_on_time_ms",
+          "decision_rt_untimed_ms",
           "decision_rt_ms",
           "decision_rt_seconds",
+          "overtime_ms",
+          "post_timeout_decision_ms",
           "timed_out",
           "decision_timestamp_iso",
+          "timeout_reason_codes",
+          "timeout_reason_other_text",
+          "timeout_reason_timestamp_iso",
+          "record_status",
+          "report_completed",
           "reported_information",
           "reported_cue_ids",
           "reported_cue_categories",
           "reported_warranted_cue",
           "reported_unwarranted_cue",
           "reported_ai_recommendation",
+          "reported_no_additional_ai_information",
           "reported_other",
           "reported_other_text",
           "report_timestamp_iso",
@@ -1496,6 +1719,10 @@
           "post_strategy",
           "post_attention",
           "post_attention_passed",
+          "questionnaire_attention_items_displayed",
+          "obvious_cases_completed",
+          "obvious_case_errors",
+          "session_quality_flag",
           "data_collection_mode",
           "backend_idempotency_key",
           "backend_record_status"
@@ -1531,22 +1758,31 @@
         if (state.currentTrialIndex >= state.trialOrder.length) {
           if (state.postSurveyCompleted) {
             renderComplete();
-            monitorBackendCompletion();
+            if (persistence.endpointConfigured) monitorBackendCompletion();
+            else clearCompletedSession();
           } else {
             renderPostSurvey();
           }
           return;
         }
 
-        renderResume();
+        renderInterrupted();
       }
 
       window.addEventListener("pagehide", handlePageExit);
       document.addEventListener("visibilitychange", () => {
         if (document.visibilityState === "hidden") {
           handlePageExit();
+        } else if (
+          state.trialFlowState === "active"
+          && state.activeDeadlineMs
+          && currentTrialElapsedMs() >= state.activeDeadlineMs
+        ) {
+          handleDeadlineExceeded();
         }
       });
+      acknowledgeDeadlineButton.addEventListener("click", acknowledgeDeadline);
+      submitTimeoutReasonButton.addEventListener("click", submitTimeoutReason);
       submitReportButton.addEventListener("click", submitReport);
       initializeExperiment();
     })();

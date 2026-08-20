@@ -265,6 +265,23 @@
       return "not_queued";
     }
 
+    function clear() {
+      window.clearTimeout(retryTimer);
+      retryTimer = null;
+      retryQueue = [];
+      acknowledgedKeys = new Set();
+      if (!storageAvailable) {
+        return false;
+      }
+      try {
+        window.localStorage.removeItem(storageKey);
+        return true;
+      } catch (error) {
+        console.warn("Local checkpoint cleanup failed.", error);
+        return false;
+      }
+    }
+
     return {
       mode: config.mode,
       endpointConfigured: config.mode === "backend_upsert",
@@ -274,6 +291,7 @@
       flushRetryQueue,
       sendBeacon,
       statusFor,
+      clear,
       pendingCount: () => retryQueue.length,
       allAcknowledged: () => config.mode === "backend_upsert" && retryQueue.length === 0
     };
