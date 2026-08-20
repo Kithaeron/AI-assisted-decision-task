@@ -238,6 +238,24 @@
       return "not_queued";
     }
 
+    function clear() {
+      window.clearTimeout(retryTimer);
+      retryTimer = null;
+      retryQueue = [];
+      acknowledgedKeys = new Set();
+      if (!storageAvailable) {
+        return false;
+      }
+      try {
+        window.localStorage.removeItem(storageKey);
+        return true;
+      } catch (error) {
+        storageAvailable = false;
+        console.warn("Local checkpoint cleanup failed.", error);
+        return false;
+      }
+    }
+
     return Object.freeze({
       mode,
       endpointConfigured: mode === "backend_required" && Boolean(backendClient?.configured),
@@ -246,6 +264,7 @@
       queueUpsert,
       flushRetryQueue,
       sendBeacon,
+      clear,
       statusFor,
       pendingCount: () => retryQueue.length,
       allAcknowledged: () => mode === "backend_required" && retryQueue.length === 0

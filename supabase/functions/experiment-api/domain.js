@@ -1,6 +1,6 @@
 export const API_CONTRACT_VERSION = "v1";
-export const STIMULUS_SET_VERSION = "fixed-60-counterbalanced-six-obvious-v4";
-export const TIMING_POLICY_VERSION = "pressure_v2_first10_30s_then50_15s";
+export const STIMULUS_SET_VERSION = "synthetic-loan-policy-no-error-v1-manifest-v1";
+export const TIMING_POLICY_VERSION = "pressure_v3_first10_30s_then50_15s_overtime_completion";
 export const STUDY_KEY = "ai_assisted_loan_decision";
 export const MAX_SINGLE_RECORD_BYTES = 128 * 1024;
 export const MAX_BATCH_BYTES = 512 * 1024;
@@ -31,7 +31,7 @@ export class ContractError extends Error {
 }
 
 export function conditionLabel(conditionKey) {
-  if (conditionKey === "pressure") return "15_seconds";
+  if (conditionKey === "pressure") return "pressure_30s_no_ai_15s_ai";
   if (conditionKey === "no_pressure") return "no_time_limit";
   throw new ContractError(400, "invalid_condition", "Unknown condition key.");
 }
