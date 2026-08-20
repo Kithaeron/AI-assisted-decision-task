@@ -1,22 +1,38 @@
 (() => {
   "use strict";
 
-  const CHECKPOINT_SCHEMA_VERSION = 2;
+  const CHECKPOINT_SCHEMA_VERSION = 1;
   const DEFAULT_CONFIG = Object.freeze({
+    mode: "local_only",
+    endpoint: "",
+    beaconEndpoint: "",
+    method: "PUT",
+    headers: {},
+    credentials: "omit",
     baseDelayMs: 1000,
     maxDelayMs: 30000
   });
 
+  function normalizeConfig(value) {
+    const candidate = value && typeof value === "object" ? value : {};
+    const endpoint = String(candidate.endpoint || "").trim();
+    const requestedMode = String(candidate.mode || "").trim().toLowerCase();
+    const mode = endpoint && requestedMode !== "local_only" ? "backend_upsert" : "local_only";
+
+    return {
+      ...DEFAULT_CONFIG,
+      ...candidate,
+      endpoint,
+      mode,
+      headers: candidate.headers && typeof candidate.headers === "object" ? candidate.headers : {}
+    };
+  }
+
   function createExperimentPersistence(options) {
     const storageKey = String(options.storageKey);
+    const sessionId = String(options.sessionId);
     const getSessionSnapshot = options.getSessionSnapshot;
-    const getBackendSession = options.getBackendSession;
-    const backendClient = options.backendClient;
-    const config = {
-      ...DEFAULT_CONFIG,
-      ...(options.retryConfig || {})
-    };
-    const mode = backendClient?.mode === "backend_required" ? "backend_required" : "local_only";
+    const config = normalizeConfig(options.backendConfig);
     let retryQueue = [];
     let acknowledgedKeys = new Set();
     let retryTimer = null;
@@ -35,16 +51,11 @@
         }
 
         const parsed = JSON.parse(raw);
-        if (![1, CHECKPOINT_SCHEMA_VERSION].includes(parsed.schemaVersion)) {
+        if (parsed.schemaVersion !== CHECKPOINT_SCHEMA_VERSION) {
           return null;
         }
 
-        retryQueue = Array.isArray(parsed.retryQueue)
-          ? parsed.retryQueue.map((item) => ({
-              ...item,
-              recordType: item.recordType || item.record?.record_type || "trial"
-            }))
-          : [];
+        retryQueue = Array.isArray(parsed.retryQueue) ? parsed.retryQueue : [];
         acknowledgedKeys = new Set(
           Array.isArray(parsed.acknowledgedKeys) ? parsed.acknowledgedKeys : []
         );
@@ -66,7 +77,7 @@
           schemaVersion: CHECKPOINT_SCHEMA_VERSION,
           savedAtIso: new Date().toISOString(),
           reason: String(reason || "state_update"),
-          dataCollectionMode: mode,
+          dataCollectionMode: config.mode,
           session: getSessionSnapshot(),
           retryQueue,
           acknowledgedKeys: Array.from(acknowledgedKeys)
@@ -86,7 +97,7 @@
     }
 
     function scheduleRetry(delayMs = 0) {
-      if (mode !== "backend_required" || retryQueue.length === 0) {
+      if (config.mode !== "backend_upsert" || retryQueue.length === 0) {
         return;
       }
 
@@ -98,21 +109,21 @@
       }, Math.max(0, delayMs));
     }
 
-    function queueUpsert(idempotencyKey, recordType, record) {
+    function queueUpsert(idempotencyKey, record) {
       const key = String(idempotencyKey);
-      if (!key || !["trial", "questionnaire"].includes(recordType)) {
-        throw new Error("A valid idempotency key and record type are required.");
-      }
-      if (mode === "local_only") {
+      if (config.mode === "local_only") {
         checkpoint("local_only_record");
-        return { idempotencyKey: key, status: "local_only" };
+        return {
+          idempotencyKey: key,
+          status: "local_only"
+        };
       }
 
       acknowledgedKeys.delete(key);
       const existingIndex = retryQueue.findIndex((item) => item.idempotencyKey === key);
       const queued = {
         idempotencyKey: key,
-        recordType,
+        sessionId,
         record,
         attempts: 0,
         nextAttemptAt: Date.now(),
@@ -127,34 +138,46 @@
 
       checkpoint("backend_record_queued");
       scheduleRetry(0);
-      return { idempotencyKey: key, status: "pending" };
-    }
-
-    function requireBackendSession() {
-      const session = getBackendSession();
-      if (!session?.experimentSessionId || !session?.sessionWriteToken) {
-        throw new Error("The authoritative backend session is not available.");
-      }
-      return session;
+      return {
+        idempotencyKey: key,
+        status: "pending"
+      };
     }
 
     async function sendItem(item) {
-      const session = requireBackendSession();
-      await backendClient.upsertRecord({
-        experiment_session_id: session.experimentSessionId,
-        session_write_token: session.sessionWriteToken,
-        idempotency_key: item.idempotencyKey,
-        record_type: item.recordType,
-        record: item.record
+      const response = await window.fetch(config.endpoint, {
+        method: String(config.method || "PUT").toUpperCase(),
+        headers: {
+          "Content-Type": "application/json",
+          ...config.headers
+        },
+        credentials: config.credentials,
+        body: JSON.stringify({
+          idempotency_key: item.idempotencyKey,
+          session_id: sessionId,
+          record: item.record
+        })
       });
+
+      if (!response.ok) {
+        throw new Error(`Backend upsert returned HTTP ${response.status}.`);
+      }
     }
 
     async function flushRetryQueue(options = {}) {
-      if (mode !== "backend_required") {
-        return { mode, acknowledged: 0, pending: 0 };
+      if (config.mode !== "backend_upsert") {
+        return {
+          mode: config.mode,
+          acknowledged: 0,
+          pending: 0
+        };
       }
       if (flushing) {
-        return { mode, acknowledged: acknowledgedKeys.size, pending: retryQueue.length };
+        return {
+          mode: config.mode,
+          acknowledged: acknowledgedKeys.size,
+          pending: retryQueue.length
+        };
       }
 
       flushing = true;
@@ -183,7 +206,7 @@
             if (queued) {
               queued.attempts += 1;
               queued.nextAttemptAt = Date.now() + backoffDelay(queued.attempts);
-              queued.lastErrorCode = String(error?.code || "backend_write_failed");
+              queued.lastError = String(error.message || error);
               queued.lastAttemptAtIso = new Date().toISOString();
             }
             checkpoint("backend_record_retry_scheduled");
@@ -198,35 +221,39 @@
         scheduleRetry(Math.max(0, nextAttemptAt - Date.now()));
       }
 
-      return { mode, acknowledged: acknowledgedKeys.size, pending: retryQueue.length };
+      return {
+        mode: config.mode,
+        acknowledged: acknowledgedKeys.size,
+        pending: retryQueue.length
+      };
     }
 
     function sendBeacon() {
-      if (mode !== "backend_required" || retryQueue.length === 0) {
+      if (
+        config.mode !== "backend_upsert"
+        || retryQueue.length === 0
+        || typeof navigator.sendBeacon !== "function"
+      ) {
         return false;
       }
 
-      let session;
-      try {
-        session = requireBackendSession();
-      } catch {
-        return false;
-      }
+      const endpoint = String(config.beaconEndpoint || config.endpoint);
+      const payload = new Blob([
+        JSON.stringify({
+          session_id: sessionId,
+          records: retryQueue.map((item) => ({
+            idempotency_key: item.idempotencyKey,
+            record: item.record
+          }))
+        })
+      ], { type: "application/json" });
 
-      return backendClient.upsertRecord({
-        experiment_session_id: session.experimentSessionId,
-        session_write_token: session.sessionWriteToken,
-        records: retryQueue.map((item) => ({
-          idempotency_key: item.idempotencyKey,
-          record_type: item.recordType,
-          record: item.record
-        }))
-      }, { beacon: true });
+      return navigator.sendBeacon(endpoint, payload);
     }
 
     function statusFor(idempotencyKey) {
       const key = String(idempotencyKey);
-      if (mode === "local_only") {
+      if (config.mode === "local_only") {
         return "local_only";
       }
       if (acknowledgedKeys.has(key)) {
@@ -238,9 +265,9 @@
       return "not_queued";
     }
 
-    return Object.freeze({
-      mode,
-      endpointConfigured: mode === "backend_required" && Boolean(backendClient?.configured),
+    return {
+      mode: config.mode,
+      endpointConfigured: config.mode === "backend_upsert",
       restore: readCheckpoint,
       checkpoint,
       queueUpsert,
@@ -248,8 +275,8 @@
       sendBeacon,
       statusFor,
       pendingCount: () => retryQueue.length,
-      allAcknowledged: () => mode === "backend_required" && retryQueue.length === 0
-    });
+      allAcknowledged: () => config.mode === "backend_upsert" && retryQueue.length === 0
+    };
   }
 
   window.createExperimentPersistence = createExperimentPersistence;
