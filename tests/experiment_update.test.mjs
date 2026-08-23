@@ -23,21 +23,21 @@ const countBy = (items, selector) => items.reduce((counts, item) => {
   return counts;
 }, {});
 
-const expectedManifestHash = "881ada667dba642b47403e20660d7edfeb644ba093a7134110bcc741e0c9931f";
+const expectedManifestHash = "b73d057387335ff2ee1d3773c3d5c968fc5ac3ca158f79fd554475ea54cec954";
 assert.equal(crypto.createHash("sha256").update(manifestSource).digest("hex"), expectedManifestHash);
-assert.equal(version, "synthetic-loan-fixed-ai-cues-v1");
+assert.equal(version, "synthetic-loan-fixed-ai-cues-70pct-v2");
 assert.equal(stimuli.length, 60);
 assert.equal(new Set(stimuli.map((item) => item.trialId)).size, 60);
 assert.equal(new Set(stimuli.map((item) => item.applicant.applicantId)).size, 60);
 assert.deepEqual(countBy(stimuli, (item) => item.groundTruthLabel), { APPROVE: 30, REJECT: 30 });
 assert.deepEqual(countBy(stimuli, (item) => item.applicant.aiRecommendation), { REJECT: 30, APPROVE: 30 });
-assert.equal(stimuli.filter((item) => item.applicant.aiIsCorrect).length, 48);
-assert.equal(stimuli.filter((item) => !item.applicant.aiIsCorrect).length, 12);
+assert.equal(stimuli.filter((item) => item.applicant.aiIsCorrect).length, 42);
+assert.equal(stimuli.filter((item) => !item.applicant.aiIsCorrect).length, 18);
 assert.ok(stimuli.every((item) => item.datasetVersion === "synthetic-loan-policy-no-error-v1"));
 assert.ok(stimuli.every((item) => item.manifestVersion === version));
 assert.ok(stimuli.every((item) => item.observedNoAiApproveRate === ""));
 assert.ok(stimuli.filter((item) => !item.applicant.aiIsCorrect).every((item) => (
-  item.stimulusType === "grey_zone"
+  !item.isObviousCase
   && item.cueBank.W1.text.includes(`supporting ${item.applicant.aiRecommendation}`)
 )));
 
@@ -76,16 +76,18 @@ for (let list = 1; list <= 6; list += 1) {
   assert.equal(new Set(assigned.map(({ item }) => item.trialId)).size, 60);
   const aiTrials = assigned.filter(({ condition }) => condition !== "no_ai").map(({ item }) => item);
   assert.equal(aiTrials.length, 50);
-  assert.deepEqual(countBy(aiTrials, (item) => item.applicant.aiRecommendation), { REJECT: 25, APPROVE: 25 });
-  assert.equal(aiTrials.filter((item) => item.applicant.aiIsCorrect).length, 40);
-  assert.equal(aiTrials.filter((item) => !item.applicant.aiIsCorrect).length, 10);
+  const recommendationCounts = countBy(aiTrials, (item) => item.applicant.aiRecommendation);
+  assert.equal(recommendationCounts.APPROVE + recommendationCounts.REJECT, 50);
+  assert.ok(Math.abs(recommendationCounts.APPROVE - recommendationCounts.REJECT) <= 2);
+  assert.equal(aiTrials.filter((item) => item.applicant.aiIsCorrect).length, 35);
+  assert.equal(aiTrials.filter((item) => !item.applicant.aiIsCorrect).length, 15);
 }
 for (const assignments of assignmentsByTrial.values()) {
   assert.deepEqual([...assignments].sort(), [...conditionKeys].sort());
 }
 
 for (const requiredText of [
-  "You will review 60 fictional loan applications for a fictional bank.",
+  "You will review 60 loan applications for a bank. The applications and decisions in this study will not affect real people.",
   "The AI recommendations and Additional AI Information were prepared before the study",
   "Next phase",
   "Time is up",
@@ -103,14 +105,14 @@ assert.ok(!html.includes("actualOutcome"));
 assert.ok(html.includes('reported_ai_recommendation: ""'));
 assert.ok(html.includes('record_status: "deadline_exceeded_incomplete"') || html.includes('"deadline_exceeded_incomplete"'));
 
-for (const field of [
+for (const internalField of [
   "dataset_version", "manifest_version", "deadline_exceeded", "decision_completed",
   "decision_completed_on_time", "trial_onset_timestamp_iso", "deadline_exceeded_timestamp_iso",
   "timeout_modal_ack_timestamp_iso", "final_choice_timestamp_iso", "decision_rt_total_ms",
   "decision_rt_on_time_ms", "decision_rt_untimed_ms", "decision_rt_ms", "overtime_ms",
   "post_timeout_decision_ms", "timeout_reason_codes", "timeout_reason_other_text",
-  "record_status", "report_completed", "session_quality_flag"
-]) assert.ok(html.includes(`"${field}"`), `CSV header missing: ${field}`);
+  "record_status", "report_completed"
+]) assert.ok(html.includes(`${internalField}:`), `Internal response field missing: ${internalField}`);
 
 assert.ok(indexHtml.includes("window.location.search"));
 assert.ok(indexHtml.includes("window.location.hash"));

@@ -46,7 +46,8 @@
       .timer-bar,
       #reportModal,
       #deadlineModal,
-      #timeoutReasonModal {
+      #timeoutReasonModal,
+      #instructionsModal {
         transition-duration: 0ms !important;
       }
     }
@@ -145,6 +146,25 @@
   </div>
 
   <div
+    id="instructionsModal"
+    class="modal-hidden fixed inset-0 z-50 flex items-center justify-center bg-slate-950/60 px-4 transition duration-150"
+    role="dialog"
+    aria-modal="true"
+    aria-labelledby="instructionsModalTitle"
+    aria-hidden="true"
+    inert
+  >
+    <div class="max-h-[90vh] w-full max-w-3xl overflow-y-auto rounded-lg bg-white p-6 shadow-xl">
+      <p class="text-sm font-semibold uppercase tracking-wide text-slate-500">AI-assisted loan decision task</p>
+      <h2 id="instructionsModalTitle" class="mt-1 text-2xl font-extrabold leading-8 text-slate-950">Instructions</h2>
+      <div id="instructionsModalContent" class="mt-5 space-y-4 leading-7 text-slate-700"></div>
+      <button id="closeInstructionsButton" type="button" class="mt-6 w-full rounded-lg bg-slate-950 px-5 py-4 text-lg font-extrabold text-white shadow-md transition hover:bg-slate-800 focus:outline-none focus:ring-4 focus:ring-slate-300">
+        Close Instructions
+      </button>
+    </div>
+  </div>
+
+  <div
     id="trialTransition"
     class="trial-transition fixed inset-0 z-40 bg-slate-950"
     aria-hidden="true"
@@ -156,7 +176,7 @@
     (() => {
       "use strict";
 
-      // The supplied labels describe a fictional deterministic bank policy, not observed real-world loan outcomes.
+      // The supplied labels describe a synthetic deterministic bank policy, not observed real-world loan outcomes.
       const FIXED_STIMULI = window.FIXED_STIMULI;
       const STIMULUS_SET_VERSION = window.STIMULUS_SET_VERSION;
       if (!Array.isArray(FIXED_STIMULI) || FIXED_STIMULI.length !== 60) {
@@ -167,10 +187,89 @@
       const REPORT_SCHEMA_VERSION = "v3_additional_ai_information_none_option";
       const DATASET_VERSION = "synthetic-loan-policy-no-error-v1";
       const TRANSITION_HALF_MS = 200;
+      const CSV_HEADERS = [
+        "participant_id",
+        "time_pressure_condition",
+        "counterbalance_list",
+        "trial_order",
+        "applicant_id",
+        "trial_condition",
+        "trial_deadline_ms",
+        "stimulus_type",
+        "annual_income_eur",
+        "requested_loan_eur",
+        "repayment_term_years",
+        "credit_score",
+        "savings_eur",
+        "ai_recommendation",
+        "ai_recommendation_shown",
+        "warranted_cue_id",
+        "warranted_cue_text",
+        "unwarranted_cue_id",
+        "unwarranted_cue_text",
+        "warranted_cue_position",
+        "user_final_decision",
+        "user_agreed_with_ai",
+        "decision_rt_ms",
+        "timed_out",
+        "obvious_response_matches_direction",
+        "reported_cue_ids",
+        "reported_no_additional_ai_information",
+        "session_quality_flag",
+        "pre_mails_s_01",
+        "pre_mails_s_02",
+        "pre_mails_s_03",
+        "pre_mails_s_04",
+        "pre_mails_s_05",
+        "pre_mails_s_06",
+        "pre_mails_s_07",
+        "pre_mails_s_08",
+        "pre_mails_s_09",
+        "pre_mails_s_10",
+        "post_trust_01",
+        "post_trust_02",
+        "post_trust_03",
+        "post_trust_04",
+        "post_trust_05",
+        "post_trust_06",
+        "post_perceived_ai_accuracy_pct",
+        "post_pressure_01",
+        "post_pressure_02",
+        "post_pressure_03"
+      ];
+      const ACTIVE_RUN_MARKER_KEY = "ai-loan-experiment:experiment_in_progress";
+      const CHECKPOINT_STORAGE_PREFIX = "ai-loan-experiment:v6:";
+      const CONDITION_ASSIGNMENT_SOURCE = "manual_researcher_start_screen";
       const BACKEND_CONFIG = window.EXPERIMENT_BACKEND_CONFIG || {
         mode: "local_only",
         endpoint: ""
       };
+      // Official English MAILS-S short form: https://hci.uni-wuerzburg.de/research/MAILS/
+      const MAILS_S_ITEMS = [
+        "I can tell if I am dealing with an application based on artificial intelligence.",
+        "I can program new applications in the field of \u201dartificial intelligence\u201d.",
+        "Although there are often new AI applications, I manage to always be \u201dup-to date\u201d.",
+        "I can handle it when interactions with AI frustrate or frighten me",
+        "I can weigh the consequences of using AI for society.",
+        "I can design new AI applications.",
+        "I can use artificial intelligence meaningfully to achieve my goals.",
+        "I can also usually solve strenuous and complicated tasks when working with artificial intelligence well.",
+        "I can prevent an AI from influencing me in my decisions.",
+        "I can assess what advantages and disadvantages the use of an artificial intelligence entails."
+      ];
+      const TRUST_ITEMS = [
+        "The AI recommendation system performed competently during the task.",
+        "Overall, I trusted the AI recommendation system.",
+        "I had confidence in the recommendations provided by the AI.",
+        "The AI recommendation system was dependable.",
+        "The AI recommendation system behaved consistently.",
+        "I was willing to rely on the AI recommendation system when making decisions."
+      ];
+      const PRESSURE_ITEMS = [
+        "I felt under time pressure while making my decisions.",
+        "I had to make decisions faster than I wanted.",
+        "The available time was sufficient for me to make careful decisions."
+      ];
       const COUNTERBALANCE_CONDITIONS = [
         { key: "no_ai", trialType: "no_ai_baseline", trialPhase: "phase_1_no_ai", cueIds: [] },
         { key: "ai_only", trialType: "ai_only_baseline", trialPhase: "phase_2_ai_only", cueIds: [] },
@@ -197,17 +296,10 @@
       const prolificParticipantId = params.get("PROLIFIC_PID");
       const isProlificSession = Boolean(prolificParticipantId);
       const studyId = params.get("STUDY_ID") || "";
-      const sessionParam = params.get("SESSION_ID") || "";
       const developmentIdentity = isProlificSession ? null : getOrCreateDevelopmentIdentity();
       const participantId = prolificParticipantId || developmentIdentity.participantId;
-      const sessionId = sessionParam || (
-        isProlificSession
-          ? getOrCreateProlificSessionId(participantId, studyId)
-          : developmentIdentity.sessionId
-      );
       const seedParam = params.get("seed") || participantId;
       const trialCount = TOTAL_SESSION_TRIALS;
-      const initialConditionKey = normalizeCondition(params.get("condition") || params.get("time_pressure"));
       const counterbalance = resolveCounterbalanceList(
         params.get("counterbalance_list") || params.get("list"),
         participantId
@@ -230,14 +322,20 @@
       const timeoutReasonOtherText = document.getElementById("timeoutReasonOtherText");
       const timeoutReasonError = document.getElementById("timeoutReasonError");
       const submitTimeoutReasonButton = document.getElementById("submitTimeoutReasonButton");
+      const instructionsModal = document.getElementById("instructionsModal");
+      const instructionsModalContent = document.getElementById("instructionsModalContent");
+      const closeInstructionsButton = document.getElementById("closeInstructionsButton");
       trialTransition.style.transitionDuration = `${TRANSITION_HALF_MS}ms`;
 
       const state = {
         participantId,
         studyId,
-        sessionId,
+        sessionId: "",
+        sessionStatus: "",
         seed: seedParam,
-        conditionKey: initialConditionKey,
+        conditionKey: "",
+        timePressureCondition: "",
+        conditionAssignmentSource: "",
         counterbalanceList: counterbalance.list,
         counterbalanceListSource: counterbalance.source,
         trialOrder: [],
@@ -261,16 +359,11 @@
         preSurveyCompleted: false,
         instructionsCompleted: false,
         phase3IntroShown: false,
-        postSurveyCompleted: false
+        postSurveyCompleted: false,
+        postSubmitting: false
       };
 
-      const persistence = window.createExperimentPersistence({
-        storageKey: `ai-loan-experiment:v5:${sessionId}`,
-        sessionId,
-        backendConfig: BACKEND_CONFIG,
-        getSessionSnapshot: serializeSessionState
-      });
-      const restoredSession = persistence.restore();
+      let persistence = null;
 
       function createUuid() {
         if (typeof crypto.randomUUID === "function") {
@@ -307,28 +400,203 @@
       function getOrCreateDevelopmentIdentity() {
         const key = "ai-loan-experiment:development-identity";
         const existing = readIdentity(key);
-        if (existing?.participantId && existing?.sessionId) {
-          return existing;
+        if (existing?.participantId) {
+          return { participantId: existing.participantId };
         }
 
         const identity = {
-          participantId: createUuid(),
-          sessionId: createUuid()
+          participantId: createUuid()
         };
         writeIdentity(key, identity);
         return identity;
       }
 
-      function getOrCreateProlificSessionId(stableParticipantId, stableStudyId) {
-        const key = `ai-loan-experiment:prolific-session:${stableParticipantId}:${stableStudyId}`;
-        const existing = readIdentity(key);
-        if (existing?.sessionId) {
-          return existing.sessionId;
+      function removeIdentity(key) {
+        try {
+          window.localStorage.removeItem(key);
+        } catch {
+          // Storage cleanup is best effort; run identities remain isolated in memory.
+        }
+      }
+
+      function checkpointStorageKey(sessionId) {
+        return `${CHECKPOINT_STORAGE_PREFIX}${sessionId}`;
+      }
+
+      function createPersistence(sessionId, storageKey, getSessionSnapshot) {
+        return window.createExperimentPersistence({
+          storageKey,
+          sessionId,
+          backendConfig: BACKEND_CONFIG,
+          getSessionSnapshot
+        });
+      }
+
+      function initializeSessionPersistence() {
+        persistence = createPersistence(
+          state.sessionId,
+          checkpointStorageKey(state.sessionId),
+          serializeSessionState
+        );
+      }
+
+      function setActiveRunMarker() {
+        writeIdentity(ACTIVE_RUN_MARKER_KEY, {
+          sessionId: state.sessionId,
+          storageKey: checkpointStorageKey(state.sessionId),
+          participantId: state.participantId,
+          studyId: state.studyId,
+          status: state.sessionStatus,
+          timePressureCondition: state.timePressureCondition,
+          conditionAssignmentSource: state.conditionAssignmentSource,
+          updatedAtIso: new Date().toISOString()
+        });
+      }
+
+      function clearActiveRunMarker() {
+        removeIdentity(ACTIVE_RUN_MARKER_KEY);
+      }
+
+      function findInterruptedRun() {
+        const activeMarker = readIdentity(ACTIVE_RUN_MARKER_KEY);
+        if (activeMarker?.sessionId && activeMarker.status !== "completed") {
+          return activeMarker;
         }
 
-        const identity = { sessionId: createUuid() };
-        writeIdentity(key, identity);
-        return identity.sessionId;
+        try {
+          const candidates = [];
+          for (let index = 0; index < window.localStorage.length; index += 1) {
+            const key = window.localStorage.key(index);
+            if (!key || ![
+              CHECKPOINT_STORAGE_PREFIX,
+              "ai-loan-experiment:v5:"
+            ].some((prefix) => key.startsWith(prefix))) {
+              continue;
+            }
+            const checkpoint = JSON.parse(window.localStorage.getItem(key) || "null");
+            const saved = checkpoint?.session;
+            if (
+              !saved?.sessionId
+              || saved.sessionStatus === "completed"
+              || saved.sessionStatus === "interrupted"
+              || saved.postSurveyCompleted
+            ) {
+              continue;
+            }
+            candidates.push({
+              sessionId: saved.sessionId,
+              storageKey: key,
+              participantId: saved.participantId || participantId,
+              studyId: saved.studyId || studyId,
+              savedAtIso: checkpoint.savedAtIso || ""
+            });
+          }
+          candidates.sort((left, right) => right.savedAtIso.localeCompare(left.savedAtIso));
+          return candidates[0] || null;
+        } catch {
+          return null;
+        }
+      }
+
+      function markRunInterrupted(run) {
+        if (!run?.sessionId) {
+          clearActiveRunMarker();
+          return;
+        }
+
+        let interruptedSnapshot = null;
+        const oldPersistence = createPersistence(
+          run.sessionId,
+          run.storageKey || checkpointStorageKey(run.sessionId),
+          () => interruptedSnapshot
+        );
+        const restored = oldPersistence.restore() || {};
+        const interruptedAtIso = new Date().toISOString();
+        const interruptedResponses = Array.isArray(restored.responses)
+          ? restored.responses.map((response) => ({ ...response, session_status: "interrupted" }))
+          : [];
+        interruptedSnapshot = {
+          ...restored,
+          participantId: restored.participantId || run.participantId || participantId,
+          studyId: restored.studyId || run.studyId || studyId,
+          sessionId: run.sessionId,
+          sessionStatus: "interrupted",
+          interruptedTimestampIso: interruptedAtIso,
+          responses: interruptedResponses
+        };
+        oldPersistence.checkpoint("session_interrupted_by_fresh_restart");
+        interruptedResponses.forEach((response) => {
+          if (response.backend_idempotency_key) {
+            oldPersistence.queueUpsert(response.backend_idempotency_key, response);
+          }
+        });
+        oldPersistence.queueUpsert(`${run.sessionId}:session`, {
+          record_type: "session",
+          participant_id: interruptedSnapshot.participantId,
+          study_id: interruptedSnapshot.studyId,
+          session_id: run.sessionId,
+          session_status: "interrupted",
+          time_pressure_condition: interruptedSnapshot.timePressureCondition || run.timePressureCondition || "",
+          condition_assignment_source: interruptedSnapshot.conditionAssignmentSource || run.conditionAssignmentSource || "",
+          saved_timestamp_iso: interruptedAtIso
+        });
+        if (oldPersistence.endpointConfigured) {
+          oldPersistence.flushRetryQueue({ force: true }).catch((error) => {
+            console.warn("Interrupted-session status will remain queued for retry.", error);
+          });
+        }
+        clearActiveRunMarker();
+      }
+
+      function retryArchivedQueuesInBackground() {
+        if (
+          !String(BACKEND_CONFIG.endpoint || "").trim()
+          || String(BACKEND_CONFIG.mode || "").trim().toLowerCase() === "local_only"
+        ) {
+          return;
+        }
+
+        try {
+          for (let index = 0; index < window.localStorage.length; index += 1) {
+            const storageKey = window.localStorage.key(index);
+            if (!storageKey || ![
+              CHECKPOINT_STORAGE_PREFIX,
+              "ai-loan-experiment:v5:"
+            ].some((prefix) => storageKey.startsWith(prefix))) {
+              continue;
+            }
+            const checkpoint = JSON.parse(window.localStorage.getItem(storageKey) || "null");
+            const archivedSession = checkpoint?.session;
+            if (
+              !archivedSession?.sessionId
+              || !["completed", "interrupted"].includes(archivedSession.sessionStatus)
+              || !Array.isArray(checkpoint.retryQueue)
+              || checkpoint.retryQueue.length === 0
+            ) {
+              continue;
+            }
+            const archivedPersistence = createPersistence(
+              archivedSession.sessionId,
+              storageKey,
+              () => archivedSession
+            );
+            archivedPersistence.restore();
+            archivedPersistence.flushRetryQueue({ force: true }).then(() => {
+              const activeMarker = readIdentity(ACTIVE_RUN_MARKER_KEY);
+              if (
+                archivedSession.sessionStatus === "completed"
+                && archivedPersistence.allAcknowledged()
+                && activeMarker?.sessionId === archivedSession.sessionId
+              ) {
+                clearActiveRunMarker();
+              }
+            }).catch((error) => {
+              console.warn("Archived backend records remain queued for retry.", error);
+            });
+          }
+        } catch (error) {
+          console.warn("Archived backend queue scan failed.", error);
+        }
       }
 
       function serializeSessionState() {
@@ -337,8 +605,11 @@
           participantId: state.participantId,
           studyId: state.studyId,
           sessionId: state.sessionId,
+          sessionStatus: state.sessionStatus,
           seed: state.seed,
           conditionKey: state.conditionKey,
+          timePressureCondition: state.timePressureCondition,
+          conditionAssignmentSource: state.conditionAssignmentSource,
           counterbalanceList: state.counterbalanceList,
           counterbalanceListSource: state.counterbalanceListSource,
           trialOrderIds: state.trialOrder.map((stimulus) => stimulus.trialId),
@@ -359,52 +630,11 @@
         };
       }
 
-      function restoreSessionState(saved) {
-        if (
-          !saved
-          || saved.stimulusSetVersion !== STIMULUS_SET_VERSION
-          || saved.participantId !== state.participantId
-          || saved.sessionId !== state.sessionId
-        ) {
+      function checkpoint(reason) {
+        if (!persistence) {
           return false;
         }
-
-        state.seed = saved.seed;
-        state.conditionKey = saved.conditionKey;
-        state.counterbalanceList = saved.counterbalanceList;
-        state.counterbalanceListSource = saved.counterbalanceListSource;
-        const materialized = buildTrialOrder();
-        const byTrialId = new Map(materialized.map((stimulus) => [stimulus.trialId, stimulus]));
-        const restoredOrder = Array.isArray(saved.trialOrderIds)
-          ? saved.trialOrderIds.map((trialId) => byTrialId.get(trialId)).filter(Boolean)
-          : [];
-
-        state.trialOrder = restoredOrder.length === TOTAL_SESSION_TRIALS
-          ? restoredOrder
-          : materialized;
-        state.currentTrialIndex = Math.min(
-          Number(saved.currentTrialIndex) || 0,
-          state.trialOrder.length
-        );
-        state.trialStartEpochMs = Number(saved.trialStartEpochMs) || 0;
-        state.activeDeadlineMs = Number.isFinite(saved.activeDeadlineMs)
-          ? Number(saved.activeDeadlineMs)
-          : null;
-        state.trialFlowState = saved.trialFlowState || "inactive";
-        state.trialOnsetTimestampIso = saved.trialOnsetTimestampIso || "";
-        state.deadlineTimestampIso = saved.deadlineTimestampIso || "";
-        state.pendingResponse = saved.pendingResponse || null;
-        state.responses = Array.isArray(saved.responses) ? saved.responses : [];
-        state.preSurvey = saved.preSurvey || null;
-        state.postSurvey = saved.postSurvey || null;
-        state.preSurveyCompleted = Boolean(saved.preSurveyCompleted);
-        state.instructionsCompleted = Boolean(saved.instructionsCompleted);
-        state.phase3IntroShown = Boolean(saved.phase3IntroShown);
-        state.postSurveyCompleted = Boolean(saved.postSurveyCompleted);
-        return state.preSurveyCompleted;
-      }
-
-      function checkpoint(reason) {
+        setActiveRunMarker();
         return persistence.checkpoint(reason);
       }
 
@@ -423,9 +653,27 @@
           participant_id: state.participantId,
           study_id: state.studyId,
           session_id: state.sessionId,
+          session_status: state.sessionStatus,
+          time_pressure_condition: state.timePressureCondition,
+          condition_assignment_source: state.conditionAssignmentSource,
           condition: conditions[state.conditionKey].csvLabel,
           counterbalance_list: state.counterbalanceList,
           responses,
+          saved_timestamp_iso: new Date().toISOString()
+        });
+      }
+
+      function queueSessionStatus() {
+        persistence.queueUpsert(`${state.sessionId}:session`, {
+          record_type: "session",
+          participant_id: state.participantId,
+          study_id: state.studyId,
+          session_id: state.sessionId,
+          session_status: state.sessionStatus,
+          time_pressure_condition: state.timePressureCondition,
+          condition_assignment_source: state.conditionAssignmentSource,
+          counterbalance_list: state.counterbalanceList,
+          counterbalance_list_source: state.counterbalanceListSource,
           saved_timestamp_iso: new Date().toISOString()
         });
       }
@@ -443,14 +691,6 @@
         state.pendingResponse = response.record_status === "complete" ? null : response;
         checkpoint(reason);
         persistence.queueUpsert(response.backend_idempotency_key, response);
-      }
-
-      function normalizeCondition(value) {
-        const normalized = String(value || "").trim().toLowerCase();
-        if (["no_pressure", "no_time_limit", "none", "no", "unlimited", "control", "low"].includes(normalized)) {
-          return "no_pressure";
-        }
-        return "pressure";
       }
 
       function resolveCounterbalanceList(value, stableParticipantId) {
@@ -592,35 +832,117 @@
         });
       }
 
-      function renderWelcome() {
+      function renderConditionSelector() {
         app.innerHTML = `
           <section class="mx-auto flex min-h-screen max-w-5xl items-center px-6 py-10">
             <div class="w-full rounded-lg border border-slate-200 bg-white p-8 shadow-sm">
-              <p class="text-sm font-semibold uppercase tracking-wide text-slate-500">TU Delft pilot experiment</p>
-              <h1 class="mt-3 text-3xl font-extrabold tracking-normal text-slate-950">Pre-task questions</h1>
-              <div class="mt-8 grid gap-5">
-                ${likertQuestion("pre_ai_familiarity", "I am familiar with AI systems that support financial decisions.", 5)}
-                ${likertQuestion("pre_ai_limits", "AI recommendations can be useful but may still be wrong.", 5)}
-              </div>
+              <p class="text-sm font-semibold uppercase tracking-wide text-slate-500">Researcher setup</p>
+              <h1 class="mt-3 text-3xl font-extrabold tracking-normal text-slate-950">Select time-pressure condition</h1>
+              <p class="mt-4 leading-7 text-slate-700">Select the assigned condition before handing the experiment to the participant.</p>
+              <fieldset class="mt-8 grid gap-3">
+                <legend class="sr-only">Time-pressure condition</legend>
+                ${conditionOption("high_pressure", "High pressure")}
+                ${conditionOption("low_pressure", "Low pressure")}
+              </fieldset>
 
-              <p id="welcomeError" class="mt-5 hidden rounded-md border border-red-200 bg-red-50 px-4 py-3 text-sm font-semibold text-red-700">
+              <div class="mt-8 flex justify-end">
+                <button id="confirmConditionButton" type="button" disabled class="rounded-lg bg-slate-950 px-6 py-3 text-base font-extrabold text-white shadow-sm transition hover:bg-slate-800 focus:outline-none focus:ring-4 focus:ring-slate-300 disabled:cursor-not-allowed disabled:opacity-50">
+                  Confirm and continue
+                </button>
+              </div>
+            </div>
+          </section>
+        `;
+        const confirmButton = document.getElementById("confirmConditionButton");
+        document.querySelectorAll('input[name="researcher_pressure_condition"]').forEach((input) => {
+          input.addEventListener("change", () => {
+            confirmButton.disabled = false;
+          });
+        });
+        confirmButton.addEventListener("click", confirmCondition);
+      }
+
+      function conditionOption(value, label) {
+        return `
+          <label class="flex cursor-pointer items-center gap-3 rounded-lg border border-slate-200 bg-slate-50 p-4 text-base font-bold text-slate-900">
+            <input class="h-5 w-5 accent-slate-950" type="radio" name="researcher_pressure_condition" value="${value}" />
+            <span>${label}</span>
+          </label>
+        `;
+      }
+
+      function confirmCondition() {
+        const selected = document.querySelector('input[name="researcher_pressure_condition"]:checked');
+        if (!selected || state.sessionId) {
+          return;
+        }
+
+        state.sessionId = createUuid();
+        state.sessionStatus = "in_progress";
+        state.timePressureCondition = selected.value;
+        state.conditionAssignmentSource = CONDITION_ASSIGNMENT_SOURCE;
+        state.conditionKey = selected.value === "high_pressure" ? "pressure" : "no_pressure";
+        state.trialOrder = [];
+        state.currentTrialIndex = 0;
+        state.pendingResponse = null;
+        state.responses = [];
+        state.preSurvey = null;
+        state.postSurvey = null;
+        state.preSurveyCompleted = false;
+        state.instructionsCompleted = false;
+        state.phase3IntroShown = false;
+        state.postSurveyCompleted = false;
+        state.postSubmitting = false;
+        initializeSessionPersistence();
+        checkpoint("condition_confirmed_session_started");
+        queueSessionStatus();
+        renderPreSurvey();
+      }
+
+      function renderPreSurvey() {
+        const itemMarkup = MAILS_S_ITEMS.map((item, index) => scaleQuestion(
+          `pre_mails_s_${String(index + 1).padStart(2, "0")}`,
+          `${index + 1}. ${item}`,
+          0,
+          10,
+          "Not at all or hardly pronounced",
+          "Very well or (almost) perfectly pronounced"
+        )).join("");
+        app.innerHTML = `
+          <section class="mx-auto min-h-screen max-w-5xl px-6 py-10">
+            <div class="w-full rounded-lg border border-slate-200 bg-white p-8 shadow-sm">
+              <p class="text-sm font-semibold uppercase tracking-wide text-slate-500">TU Delft pilot experiment</p>
+              <h1 class="mt-3 text-3xl font-extrabold tracking-normal text-slate-950">Pre-task questionnaire</h1>
+              <div class="mt-5 space-y-3 leading-7 text-slate-700">
+                <p>In the following, you will read descriptions of different abilities that one can have when dealing with artificial intelligence. These abilities can be more or less pronounced. Please rate yourself: How pronounced are your abilities?</p>
+                <p>A value of 0 means that an ability is not at all or hardly pronounced. A value of 10 means that an ability is very well or (almost) perfectly pronounced.</p>
+                <p>Please circle the value that best describes your ability.</p>
+              </div>
+              <div class="mt-8 grid gap-5">${itemMarkup}</div>
+
+              <p id="preSurveyError" class="mt-5 hidden rounded-md border border-red-200 bg-red-50 px-4 py-3 text-sm font-semibold text-red-700">
                 Please answer all pre-task questions before continuing.
               </p>
 
               <div class="mt-8 flex justify-end">
-                <button id="startButton" type="button" class="rounded-lg bg-slate-950 px-6 py-3 text-base font-extrabold text-white shadow-sm transition hover:bg-slate-800 focus:outline-none focus:ring-4 focus:ring-slate-300">
+                <button id="startButton" type="button" disabled class="rounded-lg bg-slate-950 px-6 py-3 text-base font-extrabold text-white shadow-sm transition hover:bg-slate-800 focus:outline-none focus:ring-4 focus:ring-slate-300 disabled:cursor-not-allowed disabled:opacity-50">
                   Continue
                 </button>
               </div>
             </div>
           </section>
         `;
-        document.querySelectorAll('input[name^="pre_"]').forEach((input) => {
+        const preNames = MAILS_S_ITEMS.map(
+          (_, index) => `pre_mails_s_${String(index + 1).padStart(2, "0")}`
+        );
+        const continueButton = document.getElementById("startButton");
+        document.querySelectorAll('input[name^="pre_mails_s_"]').forEach((input) => {
           input.addEventListener("change", () => {
             state.preSurvey = {
               ...(state.preSurvey || {}),
-              [input.name]: input.value
+              [input.name]: Number(input.value)
             };
+            continueButton.disabled = !collectRadioValues(preNames).isComplete;
             checkpoint("pre_questionnaire_response");
             queueQuestionnaire("pre", state.preSurvey);
           });
@@ -628,11 +950,20 @@
         document.getElementById("startButton").addEventListener("click", startExperiment);
       }
 
-      function likertQuestion(name, label, count) {
+      function scaleQuestion(name, label, minimum, maximum, leftAnchor, rightAnchor) {
         const savedValue = state.preSurvey?.[name] ?? state.postSurvey?.[name] ?? "";
-        const options = Array.from({ length: count }, (_, index) => index + 1).map((value) => `
+        const optionCount = maximum - minimum + 1;
+        const optionLayout = optionCount === 11
+          ? "grid grid-cols-4 gap-2 sm:grid-cols-6 lg:grid-cols-11"
+          : (optionCount === 7
+            ? "grid grid-cols-4 gap-2 sm:grid-cols-7"
+            : "grid grid-cols-3 gap-2 sm:grid-cols-5");
+        const options = Array.from(
+          { length: maximum - minimum + 1 },
+          (_, index) => minimum + index
+        ).map((value) => `
           <label class="flex cursor-pointer flex-col items-center gap-2">
-            <input class="likert-input sr-only" type="radio" name="${name}" value="${value}" ${String(value) === savedValue ? "checked" : ""} />
+            <input class="likert-input sr-only" type="radio" name="${name}" value="${value}" ${String(value) === String(savedValue) ? "checked" : ""} />
             <span class="flex h-10 w-10 items-center justify-center rounded-full border border-slate-300 bg-white text-sm font-bold text-slate-700 transition">${value}</span>
           </label>
         `).join("");
@@ -640,10 +971,10 @@
         return `
           <fieldset class="rounded-lg border border-slate-200 bg-slate-50 p-4">
             <legend class="text-sm font-bold leading-6 text-slate-900">${escapeHtml(label)}</legend>
-            <div class="mt-4 flex items-center justify-between gap-2">${options}</div>
+            <div class="mt-4 ${optionLayout}">${options}</div>
             <div class="mt-3 flex justify-between text-xs font-semibold text-slate-500">
-              <span>Strongly disagree</span>
-              <span>Strongly agree</span>
+              <span>${escapeHtml(leftAnchor)}</span>
+              <span class="text-right">${escapeHtml(rightAnchor)}</span>
             </div>
           </fieldset>
         `;
@@ -654,7 +985,7 @@
         let isComplete = true;
         names.forEach((name) => {
           const selected = document.querySelector(`input[name="${name}"]:checked`);
-          values[name] = selected ? selected.value : "";
+          values[name] = selected ? Number(selected.value) : "";
           if (!selected) {
             isComplete = false;
           }
@@ -662,41 +993,59 @@
         return { values, isComplete };
       }
 
+      function mean(values) {
+        return Number((values.reduce((total, value) => total + Number(value), 0) / values.length).toFixed(3));
+      }
+
       async function startExperiment() {
-        const survey = collectRadioValues(["pre_ai_familiarity", "pre_ai_limits"]);
+        const preNames = MAILS_S_ITEMS.map(
+          (_, index) => `pre_mails_s_${String(index + 1).padStart(2, "0")}`
+        );
+        const survey = collectRadioValues(preNames);
         if (!survey.isComplete) {
-          document.getElementById("welcomeError").classList.remove("hidden");
+          document.getElementById("preSurveyError").classList.remove("hidden");
           return;
         }
 
-        state.preSurvey = { ...survey.values };
+        document.getElementById("startButton").disabled = true;
+        state.preSurvey = {
+          ...survey.values,
+          pre_mails_s_mean: mean(preNames.map((name) => survey.values[name]))
+        };
         state.preSurveyCompleted = true;
         checkpoint("pre_questionnaire_completed");
         queueQuestionnaire("pre", state.preSurvey);
         renderInstructions();
       }
 
-      function renderInstructions() {
-        const timingCopy = state.conditionKey === "pressure"
+      function instructionTimingCopy() {
+        return state.conditionKey === "pressure"
           ? "You will have up to 30 seconds for each of the first 10 applications and up to 15 seconds for each later application. Please answer before the timer reaches zero. If time runs out, follow the instruction shown on screen. Your response time is recorded for research but will not be displayed to you."
-          : "There is no fixed response deadline. Please consider the information and make your decision at a natural pace. Your response time is recorded for research but will not be displayed to you.";
+          : "There is no fixed time limit for each response. Please consider the information and make your decision at a natural pace. Your response time is recorded for research but will not be displayed to you.";
+      }
+
+      function instructionsContentHtml() {
+        return `
+          <p>You will review 60 loan applications for a bank. The applications and decisions in this study will not affect real people.</p>
+          <p>Each application includes information such as annual income, requested loan amount, repayment term, credit score, and savings. Credit scores range from 0 to 1,000; a higher score indicates lower credit risk. Consider all of the information shown when making your decision.</p>
+          <p>For the first 10 applications, make the decision yourself by selecting <strong>Approve</strong> or <strong>Reject</strong>.</p>
+          <p>For the next 10 applications, you will see an AI recommendation. Select <strong>Agree</strong> to make the AI-recommended decision, or <strong>Override</strong> to make the opposite decision.</p>
+          <p>For the final 40 applications, you will also see <strong>Additional AI Information</strong>. The AI may be right or wrong, so continue to use your own judgement.</p>
+          <p>The AI recommendations and Additional AI Information were prepared before the study and do not change in response to your earlier answers.</p>
+          <p>${escapeHtml(instructionTimingCopy())}</p>
+        `;
+      }
+
+      function renderInstructions() {
         app.innerHTML = `
           <section class="flex min-h-screen items-center justify-center px-6 py-12">
             <div class="w-full max-w-3xl rounded-lg border border-slate-200 bg-white p-8 shadow-sm">
               <p class="text-sm font-semibold uppercase tracking-wide text-slate-500">AI-assisted loan decision task</p>
               <h1 class="mt-2 text-3xl font-extrabold tracking-normal text-slate-950">Instructions</h1>
-              <div class="mt-5 space-y-4 leading-7 text-slate-700">
-                <p>You will review 60 fictional loan applications for a fictional bank. The applications and decisions in this study do not concern real people or real loans.</p>
-                <p>Each application includes information such as annual income, requested loan amount, repayment term, credit score, and savings. Credit scores range from 0 to 1,000; a higher score indicates lower credit risk. Consider all of the information shown when making your decision.</p>
-                <p>For the first 10 applications, make the decision yourself by selecting <strong>Approve</strong> or <strong>Reject</strong>.</p>
-                <p>For the next 10 applications, you will see an AI recommendation. Select <strong>Agree</strong> to make the AI-recommended decision, or <strong>Override</strong> to make the opposite decision.</p>
-                <p>For the final 40 applications, you will also see <strong>Additional AI Information</strong>. The AI may be right or wrong, so continue to use your own judgement.</p>
-                <p>The AI recommendations and Additional AI Information were prepared before the study and do not change in response to your earlier answers.</p>
-                <p>${escapeHtml(timingCopy)}</p>
-              </div>
+              <div class="mt-5 space-y-4 leading-7 text-slate-700">${instructionsContentHtml()}</div>
               <div class="mt-8 flex justify-end">
                 <button id="startTrialsButton" type="button" class="rounded-lg bg-slate-950 px-6 py-3 text-base font-extrabold text-white shadow-sm transition hover:bg-slate-800 focus:outline-none focus:ring-4 focus:ring-slate-300">
-                  Start experiment
+                  Start
                 </button>
               </div>
             </div>
@@ -713,18 +1062,6 @@
         state.pendingResponse = null;
         checkpoint("instructions_completed");
         await presentCurrentTrial();
-      }
-
-      function renderInterrupted() {
-        app.innerHTML = `
-          <section class="flex min-h-screen items-center justify-center px-6 py-12">
-            <div class="w-full max-w-3xl rounded-lg border border-slate-200 bg-white p-8 shadow-sm">
-              <p class="text-sm font-semibold uppercase tracking-wide text-slate-500">Experiment interrupted</p>
-              <h1 class="mt-2 text-3xl font-extrabold tracking-normal text-slate-950">This session was interrupted.</h1>
-              <p class="mt-5 leading-7 text-slate-700">Please ask the researcher for assistance.</p>
-            </div>
-          </section>
-        `;
       }
 
       function transitionDelay() {
@@ -763,6 +1100,20 @@
         modal.classList.toggle("modal-hidden", !open);
         modal.setAttribute("aria-hidden", String(!open));
         modal.inert = !open;
+      }
+
+      function openTrialInstructions() {
+        if (!["active", "overtime_decision"].includes(state.trialFlowState)) {
+          return;
+        }
+        instructionsModalContent.innerHTML = instructionsContentHtml();
+        setModalOpen(instructionsModal, true);
+        closeInstructionsButton.focus();
+      }
+
+      function closeTrialInstructions() {
+        setModalOpen(instructionsModal, false);
+        document.getElementById("trialInstructionsButton")?.focus();
       }
 
       async function presentCurrentTrial(options = {}) {
@@ -808,6 +1159,9 @@
                   <div>
                     <p class="text-sm font-semibold uppercase tracking-wide text-slate-500">AI-assisted decision task</p>
                     <h1 class="mt-1 text-2xl font-extrabold tracking-normal text-slate-950">Trial ${trialNumber} / ${state.trialOrder.length}</h1>
+                    <button id="trialInstructionsButton" type="button" class="mt-2 text-sm font-bold text-slate-700 underline decoration-slate-400 underline-offset-4 hover:text-slate-950 focus:outline-none focus:ring-2 focus:ring-slate-300">
+                      Instructions
+                    </button>
                   </div>
 
                   ${deadlineMs ? `<div class="w-full max-w-xl">
@@ -869,6 +1223,7 @@
           document.getElementById("agreeButton").addEventListener("click", () => attemptDecision("agree_ai"));
           document.getElementById("overrideButton").addEventListener("click", () => attemptDecision("override_ai"));
         }
+        document.getElementById("trialInstructionsButton").addEventListener("click", openTrialInstructions);
         setDecisionButtonsDisabled(true);
       }
 
@@ -1015,6 +1370,9 @@
           participant_id: state.participantId,
           study_id: state.studyId,
           session_id: state.sessionId,
+          session_status: state.sessionStatus,
+          time_pressure_condition: state.timePressureCondition,
+          condition_assignment_source: state.conditionAssignmentSource,
           seed: state.seed,
           dataset_version: stimulus.datasetVersion || DATASET_VERSION,
           manifest_version: stimulus.manifestVersion || STIMULUS_SET_VERSION,
@@ -1132,6 +1490,7 @@
         if (state.trialFlowState !== "active" || !state.activeDeadlineMs) {
           return;
         }
+        setModalOpen(instructionsModal, false);
         state.decisionLocked = true;
         state.trialFlowState = "deadline_modal";
         stopTimer();
@@ -1457,15 +1816,34 @@
       }
 
       function renderPostSurvey() {
+        const trustMarkup = TRUST_ITEMS.map((item, index) => scaleQuestion(
+          `post_trust_${String(index + 1).padStart(2, "0")}`,
+          `${index + 1}. ${item}`,
+          1,
+          5,
+          "1 = Strongly disagree",
+          "5 = Strongly agree"
+        )).join("");
+        const pressureMarkup = PRESSURE_ITEMS.map((item, index) => scaleQuestion(
+          `post_pressure_${String(index + 1).padStart(2, "0")}`,
+          `${index + 8}. ${item}`,
+          1,
+          7,
+          "1 = Strongly disagree",
+          "7 = Strongly agree"
+        )).join("");
         app.innerHTML = `
           <section class="mx-auto flex min-h-screen max-w-4xl items-center px-6 py-10">
             <div class="w-full rounded-lg border border-slate-200 bg-white p-8 shadow-sm">
               <p class="text-sm font-semibold uppercase tracking-wide text-slate-500">Final questions</p>
               <h1 class="mt-2 text-3xl font-extrabold tracking-normal text-slate-950">Post-task survey</h1>
               <div class="mt-6 grid gap-5">
-                ${likertQuestion("post_ai_trust", "I trusted the AI recommendation during the task.", 5)}
-                ${likertQuestion("post_time_pressure", "I felt time pressure while making decisions.", 5)}
-                ${likertQuestion("post_strategy", "I tried to compare the additional AI information with the applicant data.", 5)}
+                ${trustMarkup}
+                <div class="rounded-lg border border-slate-200 bg-slate-50 p-4">
+                  <label for="postPerceivedAccuracy" class="text-sm font-bold leading-6 text-slate-900">7. What percentage of the AI recommendations shown during the task do you think were correct? Please enter a whole number from 0 to 100.</label>
+                  <input id="postPerceivedAccuracy" name="post_perceived_ai_accuracy_pct" type="number" min="0" max="100" step="1" inputmode="numeric" value="${escapeHtml(state.postSurvey?.post_perceived_ai_accuracy_pct ?? "")}" class="mt-4 w-full rounded-md border border-slate-300 bg-white px-4 py-3 text-base text-slate-900 focus:border-slate-600 focus:outline-none focus:ring-2 focus:ring-slate-200" />
+                </div>
+                ${pressureMarkup}
               </div>
 
               <p id="postError" class="mt-5 hidden rounded-md border border-red-200 bg-red-50 px-4 py-3 text-sm font-semibold text-red-700">
@@ -1473,7 +1851,7 @@
               </p>
 
               <div class="mt-8 flex justify-end">
-                <button id="finishButton" type="button" class="rounded-lg bg-slate-950 px-6 py-3 text-base font-extrabold text-white shadow-sm transition hover:bg-slate-800 focus:outline-none focus:ring-4 focus:ring-slate-300">
+                <button id="finishButton" type="button" disabled class="rounded-lg bg-slate-950 px-6 py-3 text-base font-extrabold text-white shadow-sm transition hover:bg-slate-800 focus:outline-none focus:ring-4 focus:ring-slate-300 disabled:cursor-not-allowed disabled:opacity-50">
                   Finish
                 </button>
               </div>
@@ -1481,30 +1859,94 @@
           </section>
         `;
 
+        const finishButton = document.getElementById("finishButton");
+        const savePostResponse = (input) => {
+          state.postSurvey = {
+            ...(state.postSurvey || {}),
+            [input.name]: input.value === "" ? "" : Number(input.value)
+          };
+          finishButton.disabled = !collectPostSurveyValues().isComplete;
+          checkpoint("post_questionnaire_response");
+          queueQuestionnaire("post", state.postSurvey);
+        };
         document.querySelectorAll('input[name^="post_"]').forEach((input) => {
           input.addEventListener("change", () => {
-            state.postSurvey = {
-              ...(state.postSurvey || {}),
-              [input.name]: input.value
-            };
-            checkpoint("post_questionnaire_response");
-            queueQuestionnaire("post", state.postSurvey);
+            savePostResponse(input);
           });
+        });
+        document.getElementById("postPerceivedAccuracy").addEventListener("input", (event) => {
+          savePostResponse(event.currentTarget);
         });
         document.getElementById("finishButton").addEventListener("click", finishExperiment);
       }
 
+      function collectPostSurveyValues() {
+        const trustNames = TRUST_ITEMS.map(
+          (_, index) => `post_trust_${String(index + 1).padStart(2, "0")}`
+        );
+        const pressureNames = PRESSURE_ITEMS.map(
+          (_, index) => `post_pressure_${String(index + 1).padStart(2, "0")}`
+        );
+        const trust = collectRadioValues(trustNames);
+        const pressure = collectRadioValues(pressureNames);
+        const accuracyInput = document.getElementById("postPerceivedAccuracy");
+        const accuracyText = accuracyInput?.value.trim() || "";
+        const accuracy = Number(accuracyText);
+        const accuracyValid = /^\d+$/.test(accuracyText)
+          && Number.isInteger(accuracy)
+          && accuracy >= 0
+          && accuracy <= 100;
+        return {
+          isComplete: trust.isComplete && pressure.isComplete && accuracyValid,
+          values: {
+            ...trust.values,
+            post_perceived_ai_accuracy_pct: accuracyValid ? accuracy : "",
+            ...pressure.values
+          }
+        };
+      }
+
       async function finishExperiment() {
-        const survey = collectRadioValues(["post_ai_trust", "post_time_pressure", "post_strategy"]);
+        if (state.postSubmitting) {
+          return;
+        }
+        const survey = collectPostSurveyValues();
         if (!survey.isComplete) {
           document.getElementById("postError").classList.remove("hidden");
           return;
         }
 
-        state.postSurvey = { ...survey.values };
+        state.postSubmitting = true;
+        document.getElementById("finishButton").disabled = true;
+        const trustNames = TRUST_ITEMS.map(
+          (_, index) => `post_trust_${String(index + 1).padStart(2, "0")}`
+        );
+        const pressureNames = PRESSURE_ITEMS.map(
+          (_, index) => `post_pressure_${String(index + 1).padStart(2, "0")}`
+        );
+        const reversedPressure = 8 - survey.values.post_pressure_03;
+        state.postSurvey = {
+          ...survey.values,
+          post_trust_mean: mean(trustNames.map((name) => survey.values[name])),
+          post_pressure_03_reversed: reversedPressure,
+          post_perceived_time_pressure_mean: mean([
+            survey.values[pressureNames[0]],
+            survey.values[pressureNames[1]],
+            reversedPressure
+          ])
+        };
         state.postSurveyCompleted = true;
+        state.sessionStatus = "completed";
+        state.responses = state.responses.map((response) => ({
+          ...response,
+          session_status: "completed"
+        }));
         checkpoint("post_questionnaire_completed");
         queueQuestionnaire("post", state.postSurvey);
+        state.responses.forEach((response) => {
+          persistence.queueUpsert(response.backend_idempotency_key, response);
+        });
+        queueSessionStatus();
 
         downloadCsv();
         await persistence.flushRetryQueue({ force: true });
@@ -1529,13 +1971,9 @@
       }
 
       function clearCompletedSession() {
-        persistence.clear();
+        clearActiveRunMarker();
         if (!isProlificSession) {
-          try {
-            window.localStorage.removeItem("ai-loan-experiment:development-identity");
-          } catch {
-            // Completion remains valid if identity cleanup is unavailable.
-          }
+          removeIdentity("ai-loan-experiment:development-identity");
         }
       }
 
@@ -1579,154 +2017,61 @@
           ? "incomplete"
           : (obviousErrors >= 3 ? "review_exclusion_threshold_met" : "pass");
         return state.responses.map((response) => ({
-          ...response,
-          backend_record_status: persistence.statusFor(response.backend_idempotency_key),
-          obvious_cases_completed: obviousResponses.length,
-          obvious_case_errors: obviousErrors,
+          participant_id: response.participant_id,
+          time_pressure_condition: state.timePressureCondition,
+          counterbalance_list: response.counterbalance_list,
+          trial_order: response.trial_order,
+          applicant_id: response.applicant_id,
+          trial_condition: response.assigned_condition,
+          trial_deadline_ms: response.trial_deadline_ms,
+          stimulus_type: response.stimulus_type,
+          annual_income_eur: response.annual_income_eur,
+          requested_loan_eur: response.requested_loan_eur,
+          repayment_term_years: response.repayment_term_years,
+          credit_score: response.credit_score,
+          savings_eur: response.savings_eur,
+          ai_recommendation: response.ai_recommendation_shown === "true"
+            ? response.ai_recommendation
+            : "",
+          ai_recommendation_shown: response.ai_recommendation_shown,
+          warranted_cue_id: response.warranted_cue_id,
+          warranted_cue_text: response.warranted_cue_text,
+          unwarranted_cue_id: response.unwarranted_cue_id,
+          unwarranted_cue_text: response.unwarranted_cue_text,
+          warranted_cue_position: response.current_warranted_cue_position,
+          user_final_decision: response.user_final_decision,
+          user_agreed_with_ai: response.user_agreed_with_ai,
+          decision_rt_ms: response.decision_rt_ms,
+          timed_out: response.timed_out,
+          obvious_response_matches_direction: response.obvious_response_matches_direction,
+          reported_cue_ids: response.reported_cue_ids,
+          reported_no_additional_ai_information: response.reported_no_additional_ai_information,
           session_quality_flag: sessionQualityFlag,
-          questionnaire_attention_items_displayed: "false",
-          pre_ai_familiarity: state.preSurvey?.pre_ai_familiarity ?? "",
-          pre_ai_limits: state.preSurvey?.pre_ai_limits ?? "",
-          pre_attention: state.preSurvey?.pre_attention ?? "",
-          pre_attention_passed: String(state.preSurvey?.pre_attention_passed ?? ""),
-          post_ai_trust: state.postSurvey?.post_ai_trust ?? "",
-          post_time_pressure: state.postSurvey?.post_time_pressure ?? "",
-          post_strategy: state.postSurvey?.post_strategy ?? "",
-          post_attention: state.postSurvey?.post_attention ?? "",
-          post_attention_passed: String(state.postSurvey?.post_attention_passed ?? "")
+          pre_mails_s_01: state.preSurvey?.pre_mails_s_01 ?? "",
+          pre_mails_s_02: state.preSurvey?.pre_mails_s_02 ?? "",
+          pre_mails_s_03: state.preSurvey?.pre_mails_s_03 ?? "",
+          pre_mails_s_04: state.preSurvey?.pre_mails_s_04 ?? "",
+          pre_mails_s_05: state.preSurvey?.pre_mails_s_05 ?? "",
+          pre_mails_s_06: state.preSurvey?.pre_mails_s_06 ?? "",
+          pre_mails_s_07: state.preSurvey?.pre_mails_s_07 ?? "",
+          pre_mails_s_08: state.preSurvey?.pre_mails_s_08 ?? "",
+          pre_mails_s_09: state.preSurvey?.pre_mails_s_09 ?? "",
+          pre_mails_s_10: state.preSurvey?.pre_mails_s_10 ?? "",
+          post_trust_01: state.postSurvey?.post_trust_01 ?? "",
+          post_trust_02: state.postSurvey?.post_trust_02 ?? "",
+          post_trust_03: state.postSurvey?.post_trust_03 ?? "",
+          post_trust_04: state.postSurvey?.post_trust_04 ?? "",
+          post_trust_05: state.postSurvey?.post_trust_05 ?? "",
+          post_trust_06: state.postSurvey?.post_trust_06 ?? "",
+          post_perceived_ai_accuracy_pct: state.postSurvey?.post_perceived_ai_accuracy_pct ?? "",
+          post_pressure_01: state.postSurvey?.post_pressure_01 ?? "",
+          post_pressure_02: state.postSurvey?.post_pressure_02 ?? "",
+          post_pressure_03: state.postSurvey?.post_pressure_03 ?? ""
         }));
       }
 
       function downloadCsv() {
-        const headers = [
-          "participant_id",
-          "study_id",
-          "session_id",
-          "seed",
-          "dataset_version",
-          "manifest_version",
-          "stimulus_set_version",
-          "condition",
-          "counterbalance_list",
-          "counterbalance_list_source",
-          "counterbalance_block",
-          "assigned_condition",
-          "trial_number",
-          "trial_order",
-          "presentation_order",
-          "trial_id",
-          "trial_type",
-          "trial_phase",
-          "trial_deadline_ms",
-          "trial_deadline_seconds",
-          "deadline_policy",
-          "trial_onset_timestamp_iso",
-          "timer_started_timestamp_iso",
-          "deadline_timestamp_iso",
-          "deadline_exceeded_timestamp_iso",
-          "timeout_modal_ack_timestamp_iso",
-          "final_choice_timestamp_iso",
-          "transition_duration_ms",
-          "rt_excludes_transition",
-          "report_prompt_shown",
-          "report_schema_version",
-          "conflict_validation_status",
-          "observed_no_ai_approve_rate",
-          "stimulus_type",
-          "is_obvious_case",
-          "intended_obvious_direction",
-          "model_estimated_approval_propensity",
-          "model_latent_score",
-          "affordability_signal",
-          "credit_signal",
-          "savings_signal",
-          "cue_combination",
-          "warranted_cue_id",
-          "warranted_cue_type",
-          "warranted_cue_text",
-          "warranted_cue_metric",
-          "warranted_cue_metric_name",
-          "unwarranted_cue_id",
-          "unwarranted_cue_type",
-          "unwarranted_cue_text",
-          "unwarranted_cue_metric",
-          "unwarranted_cue_metric_name",
-          "cue_1_id",
-          "cue_1_category",
-          "cue_1_type",
-          "cue_1_text",
-          "cue_1_metric",
-          "cue_1_metric_name",
-          "cue_2_id",
-          "cue_2_category",
-          "cue_2_type",
-          "cue_2_text",
-          "cue_2_metric",
-          "cue_2_metric_name",
-          "applicant_id",
-          "annual_income_eur",
-          "requested_loan_eur",
-          "repayment_term_years",
-          "credit_score",
-          "savings_eur",
-          "annual_repayment_burden_pct",
-          "loan_to_income_pct",
-          "savings_to_loan_pct",
-          "model_estimated_class",
-          "ai_recommendation",
-          "ai_recommendation_shown",
-          "ai_matches_model_estimate_synthetic",
-          "deadline_exceeded",
-          "decision_completed",
-          "decision_completed_on_time",
-          "user_choice",
-          "user_agreed_with_ai",
-          "user_final_decision",
-          "user_decision_matches_model_estimate",
-          "obvious_response_matches_direction",
-          "decision_rt_total_ms",
-          "decision_rt_on_time_ms",
-          "decision_rt_untimed_ms",
-          "decision_rt_ms",
-          "decision_rt_seconds",
-          "overtime_ms",
-          "post_timeout_decision_ms",
-          "timed_out",
-          "decision_timestamp_iso",
-          "timeout_reason_codes",
-          "timeout_reason_other_text",
-          "timeout_reason_timestamp_iso",
-          "record_status",
-          "report_completed",
-          "reported_information",
-          "reported_cue_ids",
-          "reported_cue_categories",
-          "reported_warranted_cue",
-          "reported_unwarranted_cue",
-          "reported_ai_recommendation",
-          "reported_no_additional_ai_information",
-          "reported_other",
-          "reported_other_text",
-          "report_timestamp_iso",
-          "current_warranted_cue_position",
-          "current_unwarranted_cue_position",
-          "pre_ai_familiarity",
-          "pre_ai_limits",
-          "pre_attention",
-          "pre_attention_passed",
-          "post_ai_trust",
-          "post_time_pressure",
-          "post_strategy",
-          "post_attention",
-          "post_attention_passed",
-          "questionnaire_attention_items_displayed",
-          "obvious_cases_completed",
-          "obvious_case_errors",
-          "session_quality_flag",
-          "data_collection_mode",
-          "backend_idempotency_key",
-          "backend_record_status"
-        ];
+        const headers = CSV_HEADERS;
         const rows = getCsvRows().map((row) => headers.map((header) => csvValue(row[header])).join(","));
         const csv = `\uFEFF${[headers.join(","), ...rows].join("\r\n")}`;
         const blob = new Blob([csv], { type: "text/csv;charset=utf-8" });
@@ -1743,30 +2088,22 @@
       }
 
       function handlePageExit() {
-        checkpoint("page_exit");
+        if (!persistence || !state.sessionId) {
+          return;
+        }
+        if (state.sessionStatus === "in_progress") {
+          checkpoint("page_exit");
+        }
         persistence.sendBeacon();
       }
 
       function initializeExperiment() {
-        const restored = restoreSessionState(restoredSession);
-        if (!restored) {
-          checkpoint("session_initialized");
-          renderWelcome();
-          return;
+        const interruptedRun = findInterruptedRun();
+        if (interruptedRun) {
+          markRunInterrupted(interruptedRun);
         }
-
-        if (state.currentTrialIndex >= state.trialOrder.length) {
-          if (state.postSurveyCompleted) {
-            renderComplete();
-            if (persistence.endpointConfigured) monitorBackendCompletion();
-            else clearCompletedSession();
-          } else {
-            renderPostSurvey();
-          }
-          return;
-        }
-
-        renderInterrupted();
+        retryArchivedQueuesInBackground();
+        renderConditionSelector();
       }
 
       window.addEventListener("pagehide", handlePageExit);
@@ -1784,6 +2121,7 @@
       acknowledgeDeadlineButton.addEventListener("click", acknowledgeDeadline);
       submitTimeoutReasonButton.addEventListener("click", submitTimeoutReason);
       submitReportButton.addEventListener("click", submitReport);
+      closeInstructionsButton.addEventListener("click", closeTrialInstructions);
       initializeExperiment();
     })();
   </script>

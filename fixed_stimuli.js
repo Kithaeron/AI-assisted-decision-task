@@ -3,13 +3,13 @@
 
   // FINAL FIXED MANIFEST: do not regenerate or remap applicant data, AI recommendations, or cue text at runtime.
   // Dataset: synthetic-loan-policy-no-error-v1
-  // Manifest: synthetic-loan-fixed-ai-cues-v1
-  const STIMULUS_SET_VERSION = "synthetic-loan-fixed-ai-cues-v1";
+  // Manifest: synthetic-loan-fixed-ai-cues-70pct-v2
+  const STIMULUS_SET_VERSION = "synthetic-loan-fixed-ai-cues-70pct-v2";
   const FIXED_STIMULI = [
   {
     "trialId": "T001",
     "datasetVersion": "synthetic-loan-policy-no-error-v1",
-    "manifestVersion": "synthetic-loan-fixed-ai-cues-v1",
+    "manifestVersion": "synthetic-loan-fixed-ai-cues-70pct-v2",
     "counterbalanceBlock": 1,
     "blockPosition": 1,
     "groundTruthZ": 0.06269699229876537,
@@ -81,7 +81,7 @@
   {
     "trialId": "T002",
     "datasetVersion": "synthetic-loan-policy-no-error-v1",
-    "manifestVersion": "synthetic-loan-fixed-ai-cues-v1",
+    "manifestVersion": "synthetic-loan-fixed-ai-cues-70pct-v2",
     "counterbalanceBlock": 1,
     "blockPosition": 2,
     "groundTruthZ": -0.1891218145663123,
@@ -153,7 +153,7 @@
   {
     "trialId": "T003",
     "datasetVersion": "synthetic-loan-policy-no-error-v1",
-    "manifestVersion": "synthetic-loan-fixed-ai-cues-v1",
+    "manifestVersion": "synthetic-loan-fixed-ai-cues-70pct-v2",
     "counterbalanceBlock": 1,
     "blockPosition": 3,
     "groundTruthZ": 0.23182901239809625,
@@ -177,15 +177,15 @@
       "modelEstimatedApprovalPropensity": 0.5576990660741151,
       "modelEstimatedClass": "APPROVE",
       "actualOutcome": "APPROVE",
-      "aiRecommendation": "APPROVE",
-      "aiIsCorrect": true
+      "aiRecommendation": "REJECT",
+      "aiIsCorrect": false
     },
     "cueBank": {
       "W1": {
         "id": "W1",
         "category": "warranted",
         "type": "Feature Explanation",
-        "text": "The AI treated savings equal to 43.3% of the requested loan as evidence supporting APPROVE.",
+        "text": "The AI treated savings equal to 43.3% of the requested loan as evidence supporting REJECT.",
         "metric": 43.3,
         "metricName": "savings_to_loan_pct"
       },
@@ -217,7 +217,7 @@
     "stimulusType": "grey_zone",
     "isObviousCase": false,
     "intendedObviousDirection": "",
-    "aiMismatchDirection": "none",
+    "aiMismatchDirection": "false_reject",
     "w1Feature": "savings-to-loan ratio",
     "conflictValidationStatus": "deterministic_synthetic_policy_proposed_v1",
     "observedNoAiApproveRate": ""
@@ -225,7 +225,7 @@
   {
     "trialId": "T004",
     "datasetVersion": "synthetic-loan-policy-no-error-v1",
-    "manifestVersion": "synthetic-loan-fixed-ai-cues-v1",
+    "manifestVersion": "synthetic-loan-fixed-ai-cues-70pct-v2",
     "counterbalanceBlock": 1,
     "blockPosition": 4,
     "groundTruthZ": -0.3186416075183894,
@@ -297,7 +297,7 @@
   {
     "trialId": "T005",
     "datasetVersion": "synthetic-loan-policy-no-error-v1",
-    "manifestVersion": "synthetic-loan-fixed-ai-cues-v1",
+    "manifestVersion": "synthetic-loan-fixed-ai-cues-70pct-v2",
     "counterbalanceBlock": 1,
     "blockPosition": 5,
     "groundTruthZ": 0.5485247782148929,
@@ -369,7 +369,7 @@
   {
     "trialId": "T006",
     "datasetVersion": "synthetic-loan-policy-no-error-v1",
-    "manifestVersion": "synthetic-loan-fixed-ai-cues-v1",
+    "manifestVersion": "synthetic-loan-fixed-ai-cues-70pct-v2",
     "counterbalanceBlock": 1,
     "blockPosition": 6,
     "groundTruthZ": 0.6484848807308026,
@@ -441,7 +441,7 @@
   {
     "trialId": "T007",
     "datasetVersion": "synthetic-loan-policy-no-error-v1",
-    "manifestVersion": "synthetic-loan-fixed-ai-cues-v1",
+    "manifestVersion": "synthetic-loan-fixed-ai-cues-70pct-v2",
     "counterbalanceBlock": 1,
     "blockPosition": 7,
     "groundTruthZ": 0.9345424156281572,
@@ -513,7 +513,7 @@
   {
     "trialId": "T008",
     "datasetVersion": "synthetic-loan-policy-no-error-v1",
-    "manifestVersion": "synthetic-loan-fixed-ai-cues-v1",
+    "manifestVersion": "synthetic-loan-fixed-ai-cues-70pct-v2",
     "counterbalanceBlock": 1,
     "blockPosition": 8,
     "groundTruthZ": -1.1503784123619403,
@@ -585,7 +585,7 @@
   {
     "trialId": "T009",
     "datasetVersion": "synthetic-loan-policy-no-error-v1",
-    "manifestVersion": "synthetic-loan-fixed-ai-cues-v1",
+    "manifestVersion": "synthetic-loan-fixed-ai-cues-70pct-v2",
     "counterbalanceBlock": 1,
     "blockPosition": 9,
     "groundTruthZ": -1.4395505437152196,
@@ -657,7 +657,7 @@
   {
     "trialId": "T010",
     "datasetVersion": "synthetic-loan-policy-no-error-v1",
-    "manifestVersion": "synthetic-loan-fixed-ai-cues-v1",
+    "manifestVersion": "synthetic-loan-fixed-ai-cues-70pct-v2",
     "counterbalanceBlock": 1,
     "blockPosition": 10,
     "groundTruthZ": -2.3940402548773303,
@@ -729,7 +729,7 @@
   {
     "trialId": "T011",
     "datasetVersion": "synthetic-loan-policy-no-error-v1",
-    "manifestVersion": "synthetic-loan-fixed-ai-cues-v1",
+    "manifestVersion": "synthetic-loan-fixed-ai-cues-70pct-v2",
     "counterbalanceBlock": 2,
     "blockPosition": 1,
     "groundTruthZ": -0.06271058713159694,
@@ -801,7 +801,7 @@
   {
     "trialId": "T012",
     "datasetVersion": "synthetic-loan-policy-no-error-v1",
-    "manifestVersion": "synthetic-loan-fixed-ai-cues-v1",
+    "manifestVersion": "synthetic-loan-fixed-ai-cues-70pct-v2",
     "counterbalanceBlock": 2,
     "blockPosition": 2,
     "groundTruthZ": -0.14678194756787374,
@@ -873,7 +873,7 @@
   {
     "trialId": "T013",
     "datasetVersion": "synthetic-loan-policy-no-error-v1",
-    "manifestVersion": "synthetic-loan-fixed-ai-cues-v1",
+    "manifestVersion": "synthetic-loan-fixed-ai-cues-70pct-v2",
     "counterbalanceBlock": 2,
     "blockPosition": 3,
     "groundTruthZ": 0.2749627883790824,
@@ -945,7 +945,7 @@
   {
     "trialId": "T014",
     "datasetVersion": "synthetic-loan-policy-no-error-v1",
-    "manifestVersion": "synthetic-loan-fixed-ai-cues-v1",
+    "manifestVersion": "synthetic-loan-fixed-ai-cues-70pct-v2",
     "counterbalanceBlock": 2,
     "blockPosition": 4,
     "groundTruthZ": 0.31863657625974584,
@@ -1017,7 +1017,7 @@
   {
     "trialId": "T015",
     "datasetVersion": "synthetic-loan-policy-no-error-v1",
-    "manifestVersion": "synthetic-loan-fixed-ai-cues-v1",
+    "manifestVersion": "synthetic-loan-fixed-ai-cues-70pct-v2",
     "counterbalanceBlock": 2,
     "blockPosition": 5,
     "groundTruthZ": -0.5485163141753568,
@@ -1041,15 +1041,15 @@
       "modelEstimatedApprovalPropensity": 0.3662087038973782,
       "modelEstimatedClass": "REJECT",
       "actualOutcome": "REJECT",
-      "aiRecommendation": "REJECT",
-      "aiIsCorrect": true
+      "aiRecommendation": "APPROVE",
+      "aiIsCorrect": false
     },
     "cueBank": {
       "W1": {
         "id": "W1",
         "category": "warranted",
         "type": "Feature Explanation",
-        "text": "The AI treated the applicant's credit score of 435 / 1000 as evidence supporting REJECT.",
+        "text": "The AI treated the applicant's credit score of 435 / 1000 as evidence supporting APPROVE.",
         "metric": 435,
         "metricName": "credit_score"
       },
@@ -1081,7 +1081,7 @@
     "stimulusType": "intermediate",
     "isObviousCase": false,
     "intendedObviousDirection": "",
-    "aiMismatchDirection": "none",
+    "aiMismatchDirection": "false_approve",
     "w1Feature": "credit score",
     "conflictValidationStatus": "deterministic_synthetic_policy_proposed_v1",
     "observedNoAiApproveRate": ""
@@ -1089,7 +1089,7 @@
   {
     "trialId": "T016",
     "datasetVersion": "synthetic-loan-policy-no-error-v1",
-    "manifestVersion": "synthetic-loan-fixed-ai-cues-v1",
+    "manifestVersion": "synthetic-loan-fixed-ai-cues-70pct-v2",
     "counterbalanceBlock": 2,
     "blockPosition": 6,
     "groundTruthZ": -0.7009408042048304,
@@ -1161,7 +1161,7 @@
   {
     "trialId": "T017",
     "datasetVersion": "synthetic-loan-policy-no-error-v1",
-    "manifestVersion": "synthetic-loan-fixed-ai-cues-v1",
+    "manifestVersion": "synthetic-loan-fixed-ai-cues-70pct-v2",
     "counterbalanceBlock": 2,
     "blockPosition": 7,
     "groundTruthZ": 0.8122195222805993,
@@ -1233,7 +1233,7 @@
   {
     "trialId": "T018",
     "datasetVersion": "synthetic-loan-policy-no-error-v1",
-    "manifestVersion": "synthetic-loan-fixed-ai-cues-v1",
+    "manifestVersion": "synthetic-loan-fixed-ai-cues-70pct-v2",
     "counterbalanceBlock": 2,
     "blockPosition": 8,
     "groundTruthZ": 1.0013284271338394,
@@ -1305,7 +1305,7 @@
   {
     "trialId": "T019",
     "datasetVersion": "synthetic-loan-policy-no-error-v1",
-    "manifestVersion": "synthetic-loan-fixed-ai-cues-v1",
+    "manifestVersion": "synthetic-loan-fixed-ai-cues-70pct-v2",
     "counterbalanceBlock": 2,
     "blockPosition": 9,
     "groundTruthZ": 1.4395110685728438,
@@ -1377,7 +1377,7 @@
   {
     "trialId": "T020",
     "datasetVersion": "synthetic-loan-policy-no-error-v1",
-    "manifestVersion": "synthetic-loan-fixed-ai-cues-v1",
+    "manifestVersion": "synthetic-loan-fixed-ai-cues-70pct-v2",
     "counterbalanceBlock": 2,
     "blockPosition": 10,
     "groundTruthZ": -1.9599585402608082,
@@ -1449,7 +1449,7 @@
   {
     "trialId": "T021",
     "datasetVersion": "synthetic-loan-policy-no-error-v1",
-    "manifestVersion": "synthetic-loan-fixed-ai-cues-v1",
+    "manifestVersion": "synthetic-loan-fixed-ai-cues-70pct-v2",
     "counterbalanceBlock": 3,
     "blockPosition": 1,
     "groundTruthZ": -0.23180931464156299,
@@ -1521,7 +1521,7 @@
   {
     "trialId": "T022",
     "datasetVersion": "synthetic-loan-policy-no-error-v1",
-    "manifestVersion": "synthetic-loan-fixed-ai-cues-v1",
+    "manifestVersion": "synthetic-loan-fixed-ai-cues-70pct-v2",
     "counterbalanceBlock": 3,
     "blockPosition": 2,
     "groundTruthZ": -0.4079204978141634,
@@ -1593,7 +1593,7 @@
   {
     "trialId": "T023",
     "datasetVersion": "synthetic-loan-policy-no-error-v1",
-    "manifestVersion": "synthetic-loan-fixed-ai-cues-v1",
+    "manifestVersion": "synthetic-loan-fixed-ai-cues-70pct-v2",
     "counterbalanceBlock": 3,
     "blockPosition": 3,
     "groundTruthZ": 0.4079236494527547,
@@ -1665,7 +1665,7 @@
   {
     "trialId": "T024",
     "datasetVersion": "synthetic-loan-policy-no-error-v1",
-    "manifestVersion": "synthetic-loan-fixed-ai-cues-v1",
+    "manifestVersion": "synthetic-loan-fixed-ai-cues-70pct-v2",
     "counterbalanceBlock": 3,
     "blockPosition": 4,
     "groundTruthZ": 0.45377067710066654,
@@ -1737,7 +1737,7 @@
   {
     "trialId": "T025",
     "datasetVersion": "synthetic-loan-policy-no-error-v1",
-    "manifestVersion": "synthetic-loan-fixed-ai-cues-v1",
+    "manifestVersion": "synthetic-loan-fixed-ai-cues-70pct-v2",
     "counterbalanceBlock": 3,
     "blockPosition": 5,
     "groundTruthZ": 0.7009854041902511,
@@ -1761,15 +1761,15 @@
       "modelEstimatedApprovalPropensity": 0.6684062127420684,
       "modelEstimatedClass": "APPROVE",
       "actualOutcome": "APPROVE",
-      "aiRecommendation": "APPROVE",
-      "aiIsCorrect": true
+      "aiRecommendation": "REJECT",
+      "aiIsCorrect": false
     },
     "cueBank": {
       "W1": {
         "id": "W1",
         "category": "warranted",
         "type": "Feature Explanation",
-        "text": "The AI treated the estimated annual principal repayment burden of 7.5% of income as evidence supporting APPROVE.",
+        "text": "The AI treated the estimated annual principal repayment burden of 7.5% of income as evidence supporting REJECT.",
         "metric": 7.5,
         "metricName": "annual_repayment_burden_pct"
       },
@@ -1801,7 +1801,7 @@
     "stimulusType": "intermediate",
     "isObviousCase": false,
     "intendedObviousDirection": "",
-    "aiMismatchDirection": "none",
+    "aiMismatchDirection": "false_reject",
     "w1Feature": "annual repayment burden",
     "conflictValidationStatus": "deterministic_synthetic_policy_proposed_v1",
     "observedNoAiApproveRate": ""
@@ -1809,7 +1809,7 @@
   {
     "trialId": "T026",
     "datasetVersion": "synthetic-loan-policy-no-error-v1",
-    "manifestVersion": "synthetic-loan-fixed-ai-cues-v1",
+    "manifestVersion": "synthetic-loan-fixed-ai-cues-70pct-v2",
     "counterbalanceBlock": 3,
     "blockPosition": 6,
     "groundTruthZ": -0.9345934673352968,
@@ -1881,7 +1881,7 @@
   {
     "trialId": "T027",
     "datasetVersion": "synthetic-loan-policy-no-error-v1",
-    "manifestVersion": "synthetic-loan-fixed-ai-cues-v1",
+    "manifestVersion": "synthetic-loan-fixed-ai-cues-70pct-v2",
     "counterbalanceBlock": 3,
     "blockPosition": 7,
     "groundTruthZ": 1.072909215840563,
@@ -1953,7 +1953,7 @@
   {
     "trialId": "T028",
     "datasetVersion": "synthetic-loan-policy-no-error-v1",
-    "manifestVersion": "synthetic-loan-fixed-ai-cues-v1",
+    "manifestVersion": "synthetic-loan-fixed-ai-cues-70pct-v2",
     "counterbalanceBlock": 3,
     "blockPosition": 8,
     "groundTruthZ": -1.2353766121133576,
@@ -2025,7 +2025,7 @@
   {
     "trialId": "T029",
     "datasetVersion": "synthetic-loan-policy-no-error-v1",
-    "manifestVersion": "synthetic-loan-fixed-ai-cues-v1",
+    "manifestVersion": "synthetic-loan-fixed-ai-cues-70pct-v2",
     "counterbalanceBlock": 3,
     "blockPosition": 9,
     "groundTruthZ": 1.2354384339881972,
@@ -2097,7 +2097,7 @@
   {
     "trialId": "T030",
     "datasetVersion": "synthetic-loan-policy-no-error-v1",
-    "manifestVersion": "synthetic-loan-fixed-ai-cues-v1",
+    "manifestVersion": "synthetic-loan-fixed-ai-cues-70pct-v2",
     "counterbalanceBlock": 3,
     "blockPosition": 10,
     "groundTruthZ": -1.7316034370667732,
@@ -2169,7 +2169,7 @@
   {
     "trialId": "T031",
     "datasetVersion": "synthetic-loan-policy-no-error-v1",
-    "manifestVersion": "synthetic-loan-fixed-ai-cues-v1",
+    "manifestVersion": "synthetic-loan-fixed-ai-cues-70pct-v2",
     "counterbalanceBlock": 4,
     "blockPosition": 1,
     "groundTruthZ": 0.1467458238640635,
@@ -2241,7 +2241,7 @@
   {
     "trialId": "T032",
     "datasetVersion": "synthetic-loan-policy-no-error-v1",
-    "manifestVersion": "synthetic-loan-fixed-ai-cues-v1",
+    "manifestVersion": "synthetic-loan-fixed-ai-cues-70pct-v2",
     "counterbalanceBlock": 4,
     "blockPosition": 2,
     "groundTruthZ": -0.3629020046668059,
@@ -2313,7 +2313,7 @@
   {
     "trialId": "T033",
     "datasetVersion": "synthetic-loan-policy-no-error-v1",
-    "manifestVersion": "synthetic-loan-fixed-ai-cues-v1",
+    "manifestVersion": "synthetic-loan-fixed-ai-cues-70pct-v2",
     "counterbalanceBlock": 4,
     "blockPosition": 3,
     "groundTruthZ": -0.5005715606967389,
@@ -2385,7 +2385,7 @@
   {
     "trialId": "T034",
     "datasetVersion": "synthetic-loan-policy-no-error-v1",
-    "manifestVersion": "synthetic-loan-fixed-ai-cues-v1",
+    "manifestVersion": "synthetic-loan-fixed-ai-cues-70pct-v2",
     "counterbalanceBlock": 4,
     "blockPosition": 4,
     "groundTruthZ": 0.5005715606967389,
@@ -2457,7 +2457,7 @@
   {
     "trialId": "T035",
     "datasetVersion": "synthetic-loan-policy-no-error-v1",
-    "manifestVersion": "synthetic-loan-fixed-ai-cues-v1",
+    "manifestVersion": "synthetic-loan-fixed-ai-cues-70pct-v2",
     "counterbalanceBlock": 4,
     "blockPosition": 5,
     "groundTruthZ": -0.5977361147527057,
@@ -2481,15 +2481,15 @@
       "modelEstimatedApprovalPropensity": 0.35486180566666603,
       "modelEstimatedClass": "REJECT",
       "actualOutcome": "REJECT",
-      "aiRecommendation": "REJECT",
-      "aiIsCorrect": true
+      "aiRecommendation": "APPROVE",
+      "aiIsCorrect": false
     },
     "cueBank": {
       "W1": {
         "id": "W1",
         "category": "warranted",
         "type": "Feature Explanation",
-        "text": "The AI treated the estimated annual principal repayment burden of 16.4% of income as evidence supporting REJECT.",
+        "text": "The AI treated the estimated annual principal repayment burden of 16.4% of income as evidence supporting APPROVE.",
         "metric": 16.4,
         "metricName": "annual_repayment_burden_pct"
       },
@@ -2521,7 +2521,7 @@
     "stimulusType": "intermediate",
     "isObviousCase": false,
     "intendedObviousDirection": "",
-    "aiMismatchDirection": "none",
+    "aiMismatchDirection": "false_approve",
     "w1Feature": "annual repayment burden",
     "conflictValidationStatus": "deterministic_synthetic_policy_proposed_v1",
     "observedNoAiApproveRate": ""
@@ -2529,7 +2529,7 @@
   {
     "trialId": "T036",
     "datasetVersion": "synthetic-loan-policy-no-error-v1",
-    "manifestVersion": "synthetic-loan-fixed-ai-cues-v1",
+    "manifestVersion": "synthetic-loan-fixed-ai-cues-70pct-v2",
     "counterbalanceBlock": 4,
     "blockPosition": 6,
     "groundTruthZ": 0.7554094828800534,
@@ -2601,7 +2601,7 @@
   {
     "trialId": "T037",
     "datasetVersion": "synthetic-loan-policy-no-error-v1",
-    "manifestVersion": "synthetic-loan-fixed-ai-cues-v1",
+    "manifestVersion": "synthetic-loan-fixed-ai-cues-70pct-v2",
     "counterbalanceBlock": 4,
     "blockPosition": 7,
     "groundTruthZ": -0.8121929569126306,
@@ -2673,7 +2673,7 @@
   {
     "trialId": "T038",
     "datasetVersion": "synthetic-loan-policy-no-error-v1",
-    "manifestVersion": "synthetic-loan-fixed-ai-cues-v1",
+    "manifestVersion": "synthetic-loan-fixed-ai-cues-70pct-v2",
     "counterbalanceBlock": 4,
     "blockPosition": 8,
     "groundTruthZ": 1.1503866258025335,
@@ -2745,7 +2745,7 @@
   {
     "trialId": "T039",
     "datasetVersion": "synthetic-loan-policy-no-error-v1",
-    "manifestVersion": "synthetic-loan-fixed-ai-cues-v1",
+    "manifestVersion": "synthetic-loan-fixed-ai-cues-70pct-v2",
     "counterbalanceBlock": 4,
     "blockPosition": 9,
     "groundTruthZ": -1.5689110925910896,
@@ -2817,7 +2817,7 @@
   {
     "trialId": "T040",
     "datasetVersion": "synthetic-loan-policy-no-error-v1",
-    "manifestVersion": "synthetic-loan-fixed-ai-cues-v1",
+    "manifestVersion": "synthetic-loan-fixed-ai-cues-70pct-v2",
     "counterbalanceBlock": 4,
     "blockPosition": 10,
     "groundTruthZ": 2.3940591104032123,
@@ -2889,7 +2889,7 @@
   {
     "trialId": "T041",
     "datasetVersion": "synthetic-loan-policy-no-error-v1",
-    "manifestVersion": "synthetic-loan-fixed-ai-cues-v1",
+    "manifestVersion": "synthetic-loan-fixed-ai-cues-70pct-v2",
     "counterbalanceBlock": 5,
     "blockPosition": 1,
     "groundTruthZ": 0.02088871020073569,
@@ -2961,7 +2961,7 @@
   {
     "trialId": "T042",
     "datasetVersion": "synthetic-loan-policy-no-error-v1",
-    "manifestVersion": "synthetic-loan-fixed-ai-cues-v1",
+    "manifestVersion": "synthetic-loan-fixed-ai-cues-70pct-v2",
     "counterbalanceBlock": 5,
     "blockPosition": 2,
     "groundTruthZ": -0.020906761381741936,
@@ -3033,7 +3033,7 @@
   {
     "trialId": "T043",
     "datasetVersion": "synthetic-loan-policy-no-error-v1",
-    "manifestVersion": "synthetic-loan-fixed-ai-cues-v1",
+    "manifestVersion": "synthetic-loan-fixed-ai-cues-70pct-v2",
     "counterbalanceBlock": 5,
     "blockPosition": 3,
     "groundTruthZ": -0.10463608419433741,
@@ -3105,7 +3105,7 @@
   {
     "trialId": "T044",
     "datasetVersion": "synthetic-loan-policy-no-error-v1",
-    "manifestVersion": "synthetic-loan-fixed-ai-cues-v1",
+    "manifestVersion": "synthetic-loan-fixed-ai-cues-70pct-v2",
     "counterbalanceBlock": 5,
     "blockPosition": 4,
     "groundTruthZ": 0.1891049077492635,
@@ -3129,15 +3129,15 @@
       "modelEstimatedApprovalPropensity": 0.5471358431570666,
       "modelEstimatedClass": "APPROVE",
       "actualOutcome": "APPROVE",
-      "aiRecommendation": "APPROVE",
-      "aiIsCorrect": true
+      "aiRecommendation": "REJECT",
+      "aiIsCorrect": false
     },
     "cueBank": {
       "W1": {
         "id": "W1",
         "category": "warranted",
         "type": "Feature Explanation",
-        "text": "The AI treated the applicant's credit score of 605 / 1000 as evidence supporting APPROVE.",
+        "text": "The AI treated the applicant's credit score of 605 / 1000 as evidence supporting REJECT.",
         "metric": 605,
         "metricName": "credit_score"
       },
@@ -3169,7 +3169,7 @@
     "stimulusType": "grey_zone",
     "isObviousCase": false,
     "intendedObviousDirection": "",
-    "aiMismatchDirection": "none",
+    "aiMismatchDirection": "false_reject",
     "w1Feature": "credit score",
     "conflictValidationStatus": "deterministic_synthetic_policy_proposed_v1",
     "observedNoAiApproveRate": ""
@@ -3177,7 +3177,7 @@
   {
     "trialId": "T045",
     "datasetVersion": "synthetic-loan-policy-no-error-v1",
-    "manifestVersion": "synthetic-loan-fixed-ai-cues-v1",
+    "manifestVersion": "synthetic-loan-fixed-ai-cues-70pct-v2",
     "counterbalanceBlock": 5,
     "blockPosition": 5,
     "groundTruthZ": -0.6484878937565215,
@@ -3249,7 +3249,7 @@
   {
     "trialId": "T046",
     "datasetVersion": "synthetic-loan-policy-no-error-v1",
-    "manifestVersion": "synthetic-loan-fixed-ai-cues-v1",
+    "manifestVersion": "synthetic-loan-fixed-ai-cues-70pct-v2",
     "counterbalanceBlock": 5,
     "blockPosition": 6,
     "groundTruthZ": -0.7554169719380558,
@@ -3321,7 +3321,7 @@
   {
     "trialId": "T047",
     "datasetVersion": "synthetic-loan-policy-no-error-v1",
-    "manifestVersion": "synthetic-loan-fixed-ai-cues-v1",
+    "manifestVersion": "synthetic-loan-fixed-ai-cues-70pct-v2",
     "counterbalanceBlock": 5,
     "blockPosition": 7,
     "groundTruthZ": -0.8717132445347257,
@@ -3393,7 +3393,7 @@
   {
     "trialId": "T048",
     "datasetVersion": "synthetic-loan-policy-no-error-v1",
-    "manifestVersion": "synthetic-loan-fixed-ai-cues-v1",
+    "manifestVersion": "synthetic-loan-fixed-ai-cues-70pct-v2",
     "counterbalanceBlock": 5,
     "blockPosition": 8,
     "groundTruthZ": 0.871753254165546,
@@ -3465,7 +3465,7 @@
   {
     "trialId": "T049",
     "datasetVersion": "synthetic-loan-policy-no-error-v1",
-    "manifestVersion": "synthetic-loan-fixed-ai-cues-v1",
+    "manifestVersion": "synthetic-loan-fixed-ai-cues-70pct-v2",
     "counterbalanceBlock": 5,
     "blockPosition": 9,
     "groundTruthZ": 1.568895761281409,
@@ -3537,7 +3537,7 @@
   {
     "trialId": "T050",
     "datasetVersion": "synthetic-loan-policy-no-error-v1",
-    "manifestVersion": "synthetic-loan-fixed-ai-cues-v1",
+    "manifestVersion": "synthetic-loan-fixed-ai-cues-70pct-v2",
     "counterbalanceBlock": 5,
     "blockPosition": 10,
     "groundTruthZ": 1.959920644872803,
@@ -3609,7 +3609,7 @@
   {
     "trialId": "T051",
     "datasetVersion": "synthetic-loan-policy-no-error-v1",
-    "manifestVersion": "synthetic-loan-fixed-ai-cues-v1",
+    "manifestVersion": "synthetic-loan-fixed-ai-cues-70pct-v2",
     "counterbalanceBlock": 6,
     "blockPosition": 1,
     "groundTruthZ": 0.10463774677353174,
@@ -3681,7 +3681,7 @@
   {
     "trialId": "T052",
     "datasetVersion": "synthetic-loan-policy-no-error-v1",
-    "manifestVersion": "synthetic-loan-fixed-ai-cues-v1",
+    "manifestVersion": "synthetic-loan-fixed-ai-cues-70pct-v2",
     "counterbalanceBlock": 6,
     "blockPosition": 2,
     "groundTruthZ": -0.2749865835091001,
@@ -3753,7 +3753,7 @@
   {
     "trialId": "T053",
     "datasetVersion": "synthetic-loan-policy-no-error-v1",
-    "manifestVersion": "synthetic-loan-fixed-ai-cues-v1",
+    "manifestVersion": "synthetic-loan-fixed-ai-cues-70pct-v2",
     "counterbalanceBlock": 6,
     "blockPosition": 3,
     "groundTruthZ": 0.36291303544404707,
@@ -3825,7 +3825,7 @@
   {
     "trialId": "T054",
     "datasetVersion": "synthetic-loan-policy-no-error-v1",
-    "manifestVersion": "synthetic-loan-fixed-ai-cues-v1",
+    "manifestVersion": "synthetic-loan-fixed-ai-cues-70pct-v2",
     "counterbalanceBlock": 6,
     "blockPosition": 4,
     "groundTruthZ": -0.4537829742951942,
@@ -3849,15 +3849,15 @@
       "modelEstimatedApprovalPropensity": 0.38846170738602503,
       "modelEstimatedClass": "REJECT",
       "actualOutcome": "REJECT",
-      "aiRecommendation": "REJECT",
-      "aiIsCorrect": true
+      "aiRecommendation": "APPROVE",
+      "aiIsCorrect": false
     },
     "cueBank": {
       "W1": {
         "id": "W1",
         "category": "warranted",
         "type": "Feature Explanation",
-        "text": "The AI treated the estimated annual principal repayment burden of 19.5% of income as evidence supporting REJECT.",
+        "text": "The AI treated the estimated annual principal repayment burden of 19.5% of income as evidence supporting APPROVE.",
         "metric": 19.5,
         "metricName": "annual_repayment_burden_pct"
       },
@@ -3889,7 +3889,7 @@
     "stimulusType": "grey_zone",
     "isObviousCase": false,
     "intendedObviousDirection": "",
-    "aiMismatchDirection": "none",
+    "aiMismatchDirection": "false_approve",
     "w1Feature": "annual repayment burden",
     "conflictValidationStatus": "deterministic_synthetic_policy_proposed_v1",
     "observedNoAiApproveRate": ""
@@ -3897,7 +3897,7 @@
   {
     "trialId": "T055",
     "datasetVersion": "synthetic-loan-policy-no-error-v1",
-    "manifestVersion": "synthetic-loan-fixed-ai-cues-v1",
+    "manifestVersion": "synthetic-loan-fixed-ai-cues-70pct-v2",
     "counterbalanceBlock": 6,
     "blockPosition": 5,
     "groundTruthZ": 0.5977516759682505,
@@ -3969,7 +3969,7 @@
   {
     "trialId": "T056",
     "datasetVersion": "synthetic-loan-policy-no-error-v1",
-    "manifestVersion": "synthetic-loan-fixed-ai-cues-v1",
+    "manifestVersion": "synthetic-loan-fixed-ai-cues-70pct-v2",
     "counterbalanceBlock": 6,
     "blockPosition": 6,
     "groundTruthZ": -1.0013942253626629,
@@ -4041,7 +4041,7 @@
   {
     "trialId": "T057",
     "datasetVersion": "synthetic-loan-policy-no-error-v1",
-    "manifestVersion": "synthetic-loan-fixed-ai-cues-v1",
+    "manifestVersion": "synthetic-loan-fixed-ai-cues-70pct-v2",
     "counterbalanceBlock": 6,
     "blockPosition": 7,
     "groundTruthZ": -1.072882164657726,
@@ -4113,7 +4113,7 @@
   {
     "trialId": "T058",
     "datasetVersion": "synthetic-loan-policy-no-error-v1",
-    "manifestVersion": "synthetic-loan-fixed-ai-cues-v1",
+    "manifestVersion": "synthetic-loan-fixed-ai-cues-70pct-v2",
     "counterbalanceBlock": 6,
     "blockPosition": 8,
     "groundTruthZ": -1.3305125078819966,
@@ -4185,7 +4185,7 @@
   {
     "trialId": "T059",
     "datasetVersion": "synthetic-loan-policy-no-error-v1",
-    "manifestVersion": "synthetic-loan-fixed-ai-cues-v1",
+    "manifestVersion": "synthetic-loan-fixed-ai-cues-70pct-v2",
     "counterbalanceBlock": 6,
     "blockPosition": 9,
     "groundTruthZ": 1.3305627077648368,
@@ -4257,7 +4257,7 @@
   {
     "trialId": "T060",
     "datasetVersion": "synthetic-loan-policy-no-error-v1",
-    "manifestVersion": "synthetic-loan-fixed-ai-cues-v1",
+    "manifestVersion": "synthetic-loan-fixed-ai-cues-70pct-v2",
     "counterbalanceBlock": 6,
     "blockPosition": 10,
     "groundTruthZ": 1.7316183498983377,
