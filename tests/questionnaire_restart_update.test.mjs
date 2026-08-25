@@ -55,7 +55,7 @@ assert.ok(html.includes('const CONDITION_ASSIGNMENT_SOURCE = "manual_researcher_
 assert.ok(!html.includes('params.get("condition")'));
 assert.ok(!html.includes('params.get("time_pressure")'));
 assert.ok(html.includes('sessionId: ""'));
-assert.ok(html.indexOf("state.sessionId = createUuid()") > html.indexOf("function confirmCondition()"));
+assert.ok(html.indexOf("state.sessionId = createUuid()") > html.indexOf("function agreeToConsent()"));
 
 assert.ok(html.includes('const ACTIVE_RUN_MARKER_KEY = "ai-loan-experiment:experiment_in_progress"'));
 assert.ok(html.includes('sessionStatus: "interrupted"'));

@@ -186,6 +186,7 @@
       const PROLIFIC_COMPLETION_URL = "https://app.prolific.com/submissions/complete?cc=PUT_COMPLETION_CODE_HERE";
       const REPORT_SCHEMA_VERSION = "v3_additional_ai_information_none_option";
       const DATASET_VERSION = "synthetic-loan-policy-no-error-v1";
+      const CONSENT_VERSION = "hrec_consent_v1_2026-08-25";
       const TRANSITION_HALF_MS = 200;
       const CSV_HEADERS = [
         "participant_id",
@@ -356,6 +357,7 @@
         responses: [],
         preSurvey: null,
         postSurvey: null,
+        consentStatus: "not_presented",
         preSurveyCompleted: false,
         instructionsCompleted: false,
         phase3IntroShown: false,
@@ -511,6 +513,14 @@
           () => interruptedSnapshot
         );
         const restored = oldPersistence.restore() || {};
+        if (!oldPersistence.endpointConfigured) {
+          oldPersistence.clear();
+          clearActiveRunMarker();
+          if (!isProlificSession) {
+            removeIdentity("ai-loan-experiment:development-identity");
+          }
+          return;
+        }
         const interruptedAtIso = new Date().toISOString();
         const interruptedResponses = Array.isArray(restored.responses)
           ? restored.responses.map((response) => ({ ...response, session_status: "interrupted" }))
@@ -623,6 +633,8 @@
           responses: state.responses,
           preSurvey: state.preSurvey,
           postSurvey: state.postSurvey,
+          consentStatus: state.consentStatus,
+          consentVersion: state.consentStatus === "affirmative" ? CONSENT_VERSION : "",
           preSurveyCompleted: state.preSurveyCompleted,
           instructionsCompleted: state.instructionsCompleted,
           phase3IntroShown: state.phase3IntroShown,
@@ -877,11 +889,10 @@
           return;
         }
 
-        state.sessionId = createUuid();
-        state.sessionStatus = "in_progress";
         state.timePressureCondition = selected.value;
         state.conditionAssignmentSource = CONDITION_ASSIGNMENT_SOURCE;
         state.conditionKey = selected.value === "high_pressure" ? "pressure" : "no_pressure";
+        state.consentStatus = "pending";
         state.trialOrder = [];
         state.currentTrialIndex = 0;
         state.pendingResponse = null;
@@ -893,10 +904,87 @@
         state.phase3IntroShown = false;
         state.postSurveyCompleted = false;
         state.postSubmitting = false;
+        renderConsentPage();
+      }
+
+      function renderConsentPage() {
+        app.innerHTML = `
+          <section class="mx-auto min-h-screen max-w-4xl px-6 py-10">
+            <div class="w-full rounded-lg border border-slate-200 bg-white p-8 shadow-sm">
+              <p class="text-sm font-semibold uppercase tracking-wide text-slate-500">TU Delft research study</p>
+              <h1 class="mt-3 text-3xl font-extrabold tracking-normal text-slate-950">Participant Information and Consent</h1>
+
+              <div class="mt-6 space-y-5 leading-7 text-slate-700">
+                <p>You are being invited to participate in a research study titled <strong>&ldquo;Modeling Human Cognition in AI-Assisted Decision-Making.&rdquo;</strong> This study is conducted by <strong>Zhiyong Zhu</strong> from TU Delft under the supervision of <strong>Ujwal Gadiraju</strong>.</p>
+
+                <p>The purpose of this study is to understand how people make decisions with AI-based support. It takes approximately <strong>15 minutes</strong>. The data will be used for a Master's thesis, academic publications and teaching. You will review 60 fictional loan applications with and without AI advice and answer short questionnaires. Depending on the assigned experimental condition, some decisions may be subject to a time limit, which may cause mild temporary pressure or fatigue.</p>
+
+                <p>As with any digital activity, a data breach is always possible. To the best of our ability, your answers will remain confidential. We record a random participant code, experimental condition, questionnaire answers, decisions and response times. We do <strong>not</strong> collect your name, signature, email address, IP address or demographic information, and the code is not linked to your identity. The CSV file is stored temporarily on the researcher's password-protected computer, transferred to TU Delft Project Data Storage and then deleted locally. Access is limited to the researcher and supervisory team. Anonymised data and non-sensitive study materials may be shared through <strong>4TU.ResearchData</strong> for future research and teaching. No identifiable information will be published.</p>
+
+                <p>Participation is entirely voluntary. You may stop at any time without giving a reason or facing negative consequences. If you stop before completion, the incomplete session will not be used. Once the data are anonymously stored, individual responses cannot be identified and removed. A small, low-value token of appreciation may be offered and is not linked to your decisions or performance.</p>
+
+                <p>For questions, contact <strong>Zhiyong Zhu</strong> at <a class="font-semibold text-slate-950 underline decoration-slate-400 underline-offset-4 focus:outline-none focus:ring-2 focus:ring-slate-300" href="mailto:Z.Zhu-5@student.tudelft.nl">Z.Zhu-5@student.tudelft.nl</a> or <strong>Ujwal Gadiraju</strong> at <a class="font-semibold text-slate-950 underline decoration-slate-400 underline-offset-4 focus:outline-none focus:ring-2 focus:ring-slate-300" href="mailto:U.K.Gadiraju@tudelft.nl">U.K.Gadiraju@tudelft.nl</a>.</p>
+
+                <p>By clicking <strong>&ldquo;I agree and continue,&rdquo;</strong> you confirm that you are at least 18 years old, have read this information and voluntarily agree to participate.</p>
+              </div>
+
+              <div class="mt-8 flex flex-col gap-3 sm:flex-row sm:justify-end">
+                <button id="declineConsentButton" type="button" class="rounded-lg border border-slate-300 bg-white px-6 py-3 text-base font-bold text-slate-800 transition hover:bg-slate-50 focus:outline-none focus:ring-4 focus:ring-slate-200">
+                  I do not agree
+                </button>
+                <button id="agreeConsentButton" type="button" class="rounded-lg bg-slate-950 px-6 py-3 text-base font-extrabold text-white shadow-sm transition hover:bg-slate-800 focus:outline-none focus:ring-4 focus:ring-slate-300">
+                  I agree and continue
+                </button>
+              </div>
+            </div>
+          </section>
+        `;
+        document.getElementById("agreeConsentButton").addEventListener("click", agreeToConsent);
+        document.getElementById("declineConsentButton").addEventListener("click", declineConsent);
+      }
+
+      function agreeToConsent() {
+        if (state.consentStatus !== "pending" || state.sessionId) {
+          return;
+        }
+
+        state.consentStatus = "affirmative";
+        state.sessionId = createUuid();
+        state.sessionStatus = "in_progress";
         initializeSessionPersistence();
-        checkpoint("condition_confirmed_session_started");
+        checkpoint("consent_affirmed_session_started");
         queueSessionStatus();
         renderPreSurvey();
+      }
+
+      function declineConsent() {
+        if (state.consentStatus !== "pending" || state.sessionId) {
+          return;
+        }
+
+        state.consentStatus = "declined";
+        state.sessionStatus = "";
+        state.responses = [];
+        state.preSurvey = null;
+        state.postSurvey = null;
+        persistence = null;
+        clearActiveRunMarker();
+        if (!isProlificSession) {
+          removeIdentity("ai-loan-experiment:development-identity");
+        }
+        renderConsentDeclined();
+      }
+
+      function renderConsentDeclined() {
+        app.innerHTML = `
+          <section class="flex min-h-screen items-center justify-center px-6 py-12">
+            <div class="w-full max-w-3xl rounded-lg border border-slate-200 bg-white p-8 shadow-sm">
+              <p class="text-sm font-semibold uppercase tracking-wide text-slate-500">Participation declined</p>
+              <h1 class="mt-3 text-3xl font-extrabold tracking-normal text-slate-950">The session has ended</h1>
+              <p class="mt-5 leading-7 text-slate-700">You have not consented to participate. No research data have been saved. Please inform the researcher that the session has ended.</p>
+            </div>
+          </section>
+        `;
       }
 
       function renderPreSurvey() {

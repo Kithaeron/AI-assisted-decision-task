@@ -11,7 +11,9 @@ const sandbox = { window: {} };
 vm.runInNewContext(manifestSource, sandbox, { filename: "fixed_stimuli.js" });
 const stimuli = sandbox.window.FIXED_STIMULI;
 
-assert.ok(!html.toLowerCase().includes("fictional"));
+const instructionsBody = html.match(/function instructionsContentHtml\(\) \{([\s\S]*?)\n      \}/)?.[1] || "";
+assert.ok(instructionsBody);
+assert.ok(!instructionsBody.toLowerCase().includes("fictional"));
 assert.ok(html.includes("There is no fixed time limit for each response."));
 assert.ok(html.includes(">\n                  Start\n                </button>"));
 assert.ok(html.includes('id="trialInstructionsButton"'));
